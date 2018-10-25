@@ -1,0 +1,403 @@
+---
+title: "Case Study: French Motor Third-Party Liability Claims"
+author:
+  - Alexander Noll^[PartnerRe Ltd - PartnerRe Holdings Europe Limited]
+  - Robert Salzmann^[SIGNAL IDUNA Reinsurance Ltd]
+  - Mario V. Wuthrich^[RiskLab, ETH Zurich]
+params:
+  max_runtime: 3600
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+# Introduction
+
+This short tutorial complements the [paper Case Study: French Motor Third-Party Liability Claims](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3164764) on modelling the claims frequency for a french motor third party liability portfolio. Its focus is to show how to use the popular [H2O package](https://www.h2o.ai/) in practice.
+
+H2O is popular for several reasons:
+
+1. It is [open source](https://github.com/h2oai/h2o-3)
+2. It scales very well to [large datasets](https://github.com/szilard/benchm-ml)
+3. It offers many convenience functions, some of which we will explore here
+4. It has a consistent interface across different machine learning models
+
+A number of tutorials on using H2O can be found on [this github site](https://github.com/h2oai/h2o-tutorials).
+
+# Setup
+
+```{r, warning = FALSE, message = FALSE}
+library(h2o)
+library(CASdatasets)
+library(tidyverse)
+library(recipes)     # Library for data processing
+library(glue)        # For conveniently concatenating strings
+library(zeallot)     # for %<-% operator
+```
+
+
+# Data preprocessing
+
+We start by loading the data, replacing `Exposure` greater than one year by one year and clipping the claim number at four. Then we perform the same train-test split (with `set.seed(100)`) as in Section 1 ("Data and descriptive statistics") of the paper.
+
+```{r load-data}
+data(freMTPL2freq)
+glimpse(freMTPL2freq)
+dat <- freMTPL2freq %>% 
+  as_tibble() %>% 
+  mutate_at(vars(VehPower, VehGas), factor) %>% 
+  mutate(Exposure = if_else(Exposure > 1, 1, Exposure),
+         ClaimNb = if_else(ClaimNb > 4, 4, ClaimNb))
+
+set.seed(100)
+ll <- sample(1:nrow(dat), round(0.9 * nrow(dat)), replace = FALSE)
+learn <- dat[ll, ] 
+test <- dat[-ll, ]
+```
+
+The [`recipes` package](https://cran.r-project.org/web/packages/recipes/index.html) is used to prepare the data further. This package contains many preprocessing functions that are conventionally used in statistical modelling, ranging from simple transforms like centering and scaling variables, to complex steps, like nearest neighbor imputation. The main convenience of the package is that the preprocessing operations are **learnt on the training set** and can then be **applied to the test set (or new data points)**. For example, when doing k-nearest neighbor imputation, it is important that the nearest neighbors come only from the training set. 
+
+Here, a `recipes` object is prepared to center and scale the numeric variables and to transform the exposure to the logarithmic scale.  The recipes object itself should be thought of, as the name suggests, as a recipe to transform (or **bake**) input data into the form that gets fed into the model. This variable normalization is more important for some machine learning models than others (e.g. decision tree based models are rather unaffected, whereas optimization might not work properly for neural networks if the features live on very different scales).
+
+Note that, as mentioned above, the `recipes` API (application programming interface) allows us to use the training set to calculate the centering and scaling variables and then apply those to the test set. 
+
+```{r}
+# Prepare the recipe object
+rec_obj <- recipe(ClaimNb ~ ., # Throw out id column, but use all other variables as predictors
+                  data = learn %>% select(-IDpol)) %>% 
+  step_center(VehAge, DrivAge, BonusMalus, Density) %>% # Subtract column mean 
+  step_scale(VehAge, DrivAge, BonusMalus, Density) %>%  # Divide columns by standard deviation
+  step_log(Exposure) %>%                                # Apply log transform
+  prep(training = learn)                                # Use `learn` set to prepare recipes object
+
+# Use recipe to "bake" the final data 
+learn_prepped <- bake(rec_obj, newdata = learn) %>% rename(Offset = Exposure) # Bake the recipe
+test_prepped <- bake(rec_obj, newdata = test) %>% rename(Offset = Exposure)
+```
+
+# Starting an H2O cluster
+
+In order to fit a model using the [`h2o` package](https://cran.r-project.org/web/packages/h2o/), we first have to initialize an `h2o` cluster with the command `h2o.init()`. This command starts a process on the computer (or on a remote server) running in the background. This process has nothing to do with the R session that we are currently working in. Thus, *all objects that are avaiable in the current R session have to be uploaded to the H2O cluster before being able to use them*. This is performed with the `as.h2o()` function in the next code chunk.
+
+```{r}
+h2o.init(nthreads = 4, port = 11223) # Use 4 CPUs and custom port
+h2o.no_progress()                    # Disable progress bars for nicer output
+learn.h2o <- as.h2o(learn_prepped)   # Upload data to h2o
+test.h2o <- as.h2o(test_prepped)
+```
+
+# Poisson Generalized Linear Model
+
+After performing these preprocessing and setup steps, we are now ready to train a first model. For the sake of explaining the H2O API, we first fit a **Poisson GLM with offset** (see Section 3). We start with a few words on the general API used in H2O. All machine learning algorithms in H2O have a similar interface: first of all, the model is called with `h2o.xxx` where `xxx` is the model we want to fit (e.g. `h2o.glm` or `h2o.gbm`, see [here](http://docs.h2o.ai/h2o/latest-stable/h2o-docs/data-science.html) for a list of all algorithms). Then the **predictor columns** are specified as the `x` argument, the target variable as the `y` argument and the dataset as `training_frame`. Also, the offset (logarithm of `Exposure`) can be set with the `offset_column` argument.
+
+Optionally, a **validation frame** can be specified with the `validation_frame` argument on which performance metrics are calculated. Alternatively, there is the `nfolds` argument for performing cross-validation (see Section 4.3). Most of the other arguments then specify the **hyperparameters** of the ML algorithm. Note that `h2o.glm` does not reproduce the results of the `glm` function in R (for example, some regularization is applied by default; if you want to know more, it is worthwhile reading through the default arguments). The next code chunk shows an example:
+
+```{r}
+# Use all columns except target and offset
+x <- setdiff(colnames(learn.h2o), c("ClaimNb", "Offset")) 
+y <- "ClaimNb"      # Target variable
+offset <- "Offset"  # log(exposure)
+
+glm_fit <- h2o.glm(
+  x = x, 
+  y = y,                                          
+  offset_column = offset,
+  training_frame = learn.h2o,
+  validation_frame = test.h2o,
+  
+  family = "poisson",
+  nfolds = 5, # 5 fold cross-validation
+  seed = 1    # For reproducibility         
+)
+
+glm_fit
+```
+
+H2O provides us with a lot of useful output: we can read off the training and validation mean residual deviance (along with many other performance measures). These performance measures are also available for each split in the cross-validation so that we can get a feel for the variability of the performance on new data.
+
+There is also a convenient function for plotting the variable importance (in the case of a GLM, this is defined to be the absolute value of the standardized coefficients. In the case at hand, these are simply the coefficients, since we have already standardized the variables):
+
+```{r}
+h2o.varimp_plot(glm_fit, num_of_features = 20)
+```
+
+We see that `BonusMalus` is the most important feature. It is positive, implying that higher `BonusMalus` is associated with higher expected claim frequency (holding the other variables fixed). The second most important variable is vehicle age with a negative coefficient.
+
+Let's extract the test-set performance:
+
+```{r}
+cat(glue("Out-of-sample deviance: {signif(h2o.mean_residual_deviance(glm_fit, valid = TRUE), 3)}"))
+```
+
+Note that the results, both in coefficients and performance, are different from Section 3 for two reasons:
+
++ In the paper, the features were further processed (e.g. numeric columns were binned)
++ By default, H2O fits models with non-zero regularization parameter
+
+# Boosting Machines
+
+As next example, we show how to train a **Gradient Boosting Machine** (see Section 5). The interface is very similiar to that of `h2o.glm`, the main difference being that we have to replace the `family` argument with `distribution`:
+
+```{r}
+gbm_fit <- h2o.gbm(
+  x = x, 
+  y = y,                                          
+  offset_column = offset,
+  training_frame = learn.h2o,
+  
+  distribution = "poisson",
+  nfolds = 5,
+  keep_cross_validation_predictions = TRUE,
+  seed = 1 # For reproducibility
+)
+
+gbm_fit
+```
+
+Note that all the hyperparameters have been kept at their default values. Unfortunately, the `mean_residual_deviance` cannot be compared directly, since the GBM model in H2O uses another definition of deviance. We can, however, compute the deviance with a function (this is done on the H2O cluster and not in the R session):
+
+```{r}
+get_deviance <- function(y_pred, y_true) {
+  2 * (sum(y_pred) - sum(y_true) + sum(log((y_true / y_pred) ^ (y_true)))) / nrow(y_pred)
+}
+
+# Predict on various sets
+pred_learn <- predict(gbm_fit, learn.h2o)$predict
+pred_cv <- h2o.cross_validation_holdout_predictions(gbm_fit)
+pred_test <- predict(gbm_fit, test.h2o)$predict
+
+# Calculate the deviance measures
+in_sample <- get_deviance(pred_learn, learn.h2o$ClaimNb)
+cv <- get_deviance(pred_cv, learn.h2o$ClaimNb)
+out_of_sample <- get_deviance(pred_test, test.h2o$ClaimNb)
+
+# Show them
+cat(glue("In-sample deviance: {signif(in_sample, 3)}\n\n"))
+cat(glue("CV-deviance: {signif(cv, 3)}\n\n"))
+cat(glue("Out-of-sample deviance: {signif(out_of_sample, 3)}"))
+```
+
+Let us also examine the variable importances:
+
+```{r gbm-varimp}
+h2o.varimp_plot(gbm_fit)
+```
+
+We obtain similar results as before with `BonusMalus` and `VehAge` being the most important variables. Note that it is hard to compare the variable importance between a GLM and a GBM in general, since they are computed very differently, especially for categorical variables (where we get one coefficient by category in the case of a GLM, but only one aggregated importance in the GBM case).
+
+Also note that the results do not agree with the ones from the paper for several reasons:
+
+1. Different hyperparameters like learning rate, maxmium depth, etc.
+2. Different cross-validation schemes and splits
+3. Randomness: for example, in GBM many random events occur (e.g. which rows and columns are selceted for learning a tree, corresponding to the parameters `sample_rate` and `col_sample_rate`, respectively). Getting the exact same results would require all of these choices to be the same.
+
+The same comments apply to [neural networks]{#neural-networks}.
+
+## Hyperparameter tuning
+
+To improve the performance of the models trained so far, we next turn our attention to **tuning the hyperparameters** (see Section 4.3). Hyperparameters are parameters that influence the learning of the algorithm, but cannot be learnt directly. They are usually optimized by training the ML algorithm with several values and then comparing the performance using cross-validation. The two most common ways to find good hyperparameters are:
+
+1. **Grid search**: in this case, for each hyperparameter, a set of values is defined and then all combinations of hyperparameters are considered. If we have many hyperparameters, then this process can quickly become very slow due to the high dimension of the hyperparameter space.
+1. **Random grid search**: here, again, for each hyperaparmeter, a set of possible values is defined and then combinations of hyperparameters are tried by sampling each hyperparameter independently. 
+
+Random grid search is usually the recommended approach in practical applications.
+
+Both ways of hyperparameter optimization are implemented in H2O. Let us show how to do it using the `RandomDiscrete` (i.e. random grid search) strategy:
+
+We use 5-fold cross validation and specify the `RandomDiscrete` strategy, along with the maximum runtime in seconds.
+
+The next step is to define the *grid*, over which random sampling should be performed. We try to optimize the *learning rate*, the *maximal depth* of the individual trees, the *sampling rate* and *column sampling rate*.
+
+Finally, the hyperparameter optimization can be started with the `h2o.grid` command. We have to specify the algorithm to be used, the predictors (via the `x` argument), the target (via the `y` argument) and the offset column. The distribution has to be specified as well. Finally, the training frame and `nfolds` arguments are passed to the function along with the tuning grid (`hyper_params = gbm_params`) and the search criteria (`search_criteria = strategy`). The number of trees is set very high, but **early stopping** is used as well: if the deviance does not improve by more than 0.1% in five rounds, no further trees are fit.
+
+```{r gbm-grid}
+# Search parameter
+strategy <- list(strategy = "RandomDiscrete",
+                 max_runtime_secs = params$max_runtime,
+                 seed = 1)
+
+# Define grid
+gbm_params <- list(learn_rate = seq(0.001, 0.3, 0.001),
+                   max_depth = seq(2, 10),
+                   sample_rate = c(0.8, 0.9, 1.0),
+                   col_sample_rate = seq(0.1, 1.0, 0.1))
+
+# Launch grid search
+gbm_grid <- h2o.grid(
+  "gbm",
+  x = x,
+  y = y,
+  offset_column = offset,
+  distribution = "poisson",
+  
+  training_frame = learn.h2o,
+  nfolds = 5,
+  hyper_params = gbm_params,
+  search_criteria = strategy,
+  
+  seed = 1,
+  ntrees = 10000,
+  stopping_rounds = 5,           # Early stopping
+  stopping_tolerance = 0.001,
+  stopping_metric = "deviance"
+)
+```
+
+After running this grid search, let us examine the results.
+
+```{r}
+gbm_grid
+```
+
+We again obtain a lot of information. Note that the models have been ordered according to their residual deviance (which, as mentioned above, does not equal the Poisson deviance). Let us calculate the deviance of the best model:
+
+```{r get-best-gbm-deviance}
+best_gbm <- h2o.getModel(gbm_grid@model_ids[[1]]) # Extract best model from grid
+summary(best_gbm) # Show summary
+```
+
+```{r}
+h2o.varimp_plot(best_gbm)
+```
+
+Finally, let us calculate the performance of this model on the test set:
+
+```{r}
+pred_test <- predict(best_gbm, test.h2o)$predict
+out_of_sample <- get_deviance(pred_test, test.h2o$ClaimNb)
+cat(glue("Out-of-sample deviance: {signif(out_of_sample, 3)}"))
+```
+
+We see that the model performs roughly the same as the version with the default values of the parameters.
+
+# Neural networks {#neural-networks}
+
+We next show how to train feed-forward neural networks with H2O (see Section 6).
+
+The API to H2O's neural network algorithm is the same as for the GBM model. We just additionally specify some neural network specific parameters like the number of hidden nodes and the activation function. Note that deeper neural networks can be specified by taking a longer *vector of hidden units* (e.g. `hidden = c(20, 20)`).
+
+
+```{r}
+deep_model <- h2o.deeplearning(
+  x = setdiff(colnames(learn.h2o), c("ClaimNb", "Offset")),
+  y = "ClaimNb",
+  offset_column = "Offset",
+  distribution = "poisson",
+  
+  training_frame = learn.h2o,
+  nfolds = 5,
+  seed = 1,
+  
+  # Neural network parameters
+  hidden = c(20),
+  input_dropout_ratio = 0,
+  epochs = 30,
+  activation = "Tanh"
+)
+
+deep_model
+```
+
+We use this model to calculate the `in_sample` and `out_of_sample` deviance:
+
+```{r}
+pred_learn <- predict(deep_model, learn.h2o)
+pred_test <- predict(deep_model, test.h2o)
+
+
+in_sample <- get_deviance(pred_learn, learn.h2o$ClaimNb)
+out_of_sample <- get_deviance(pred_test, test.h2o$ClaimNb)
+
+cat(glue("In-sample deviance: {signif(in_sample, 3)}\n\n"))
+cat(glue("Out-of-sample deviance: {signif(out_of_sample, 3)}"))
+```
+
+Note that it performs significantly worse than the gradient boosting model.
+
+Next, we perform hyperparameter tuning with random grid search on the following parameters:
+
++ `hidden` indicates the architecture of the neural network
++ `activation` specified the activation function
++ `input_dropout_ratio` gives the dropout ratio from input to the first hidden layer
++  `l1` gives the L1 regularization parameter
++ `l2` is the L2 regularization parameter
++ `epochs` is the number of passes over the data
+
+We use the same split into training and validation set as before for the GBM.
+
+
+```{r}
+dl_grid <- list(
+  hidden = list(10, 20, 50, 100, c(10, 10), c(10, 20), c(20, 10), c(20, 20),
+                c(50, 20), c(100, 50), c(10, 10, 10), c(50, 25, 10), c(100, 50, 25),
+                c(10, 10, 10, 10), c(20, 20, 20, 20), c(50, 50, 30, 20)),
+  
+  activation = c("Rectifier", "Tanh", "Maxout", "RectifierWithDropout",
+                 "TanhWithDropout", "MaxoutWithDropout"),
+  
+  input_dropout_ratio = c(0, 0.05, 0.1),
+  l1 = seq(0, 1e-4, 1e-6),
+  l2 = seq(0, 1e-4, 1e-6),
+  epochs = c(10, 20, 30)
+)
+
+strategy  <-  list(strategy = "RandomDiscrete",
+                   max_runtime_secs = params$max_runtime,
+                   seed = 1,
+                   stopping_rounds = 5,           # Early stopping
+                   stopping_tolerance = 0.001,
+                   stopping_metric = "deviance")
+
+dl_random_grid <- h2o.grid(
+  algorithm = "deeplearning",
+  grid_id = "dl_grid_random",
+  training_frame = learn.h2o,
+  nfolds = 5,
+  seed = 1,
+  
+  x = setdiff(colnames(learn.h2o), c("ClaimNb", "Offset")),
+  y = "ClaimNb",
+  offset_column = "Offset",
+  distribution = "poisson",
+  
+  hyper_params = dl_grid,
+  search_criteria = strategy
+)
+
+dl_random_grid
+```
+
+We predict on the test set using the best model:
+
+```{r}
+best_model <- h2o.getModel(dl_random_grid@summary_table$model_ids[[1]])
+
+pred_learn <- predict(best_model, learn.h2o)
+pred_test <- predict(best_model, test.h2o)
+
+in_sample <- get_deviance(pred_learn, learn.h2o$ClaimNb)
+out_of_sample <- get_deviance(pred_test, test.h2o$ClaimNb)
+
+cat(glue("In-sample deviance: {signif(in_sample, 3)}\n\n"))
+cat(glue("Out-of-sample deviance: {signif(out_of_sample, 3)}"))
+```
+
+
+# Summary
+
+In this short tutorial we showed how to use the H2O and its convenience functions to fit various machine learning models. The result is that, with the tuning employed here, GBM models perform better than deep learning models. For GBMs, the default parameters give almost the same performance as tuned parameters. The table below shows the performance of the various algorithms:
+
+Algorithm                         | Out-of-sample deviance
+----------------------------------|-----------------------
+GLM (paper)                       | 0.322
+GLM (H2O)                         | 0.328
+GBM untuned                       | 0.312
+GBM tuned                         | 0.312
+NN (shallow with 20 hidden units) | 0.332
+NN (tuned)                        | 0.324
+
+
+
+

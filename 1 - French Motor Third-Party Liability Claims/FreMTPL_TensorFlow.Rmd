@@ -1,0 +1,739 @@
+---
+title: "French MTPL Claims with TensorFlow"
+author:
+  - Andrea Ferrario^[ETH Zurich - Mobiliar Lab for Analytics]
+  - Alexander Noll^[PartnerRe Ltd - PartnerRe Holdings Europe Limited]
+  - Mario V. Wuthrich^[RiskLab, ETH Zurich]
+output: html_notebook
+---
+
+# Introduction
+
+This short tutorial complements the [paper](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3164764) on modelling the claims frequency for a french motor third party liability portfolio. This tutorial shows how to use [TensorFlow](https://www.tensorflow.org/), and more specifically its [R-API](https://tensorflow.rstudio.com/), to do Poisson regression using GLM and Neural Networks.
+
+TensorFlow is nowadays the standard deep learning library, and actually its scope extends beyond deep learning. It should maybe best be thought of as a library to perform numeric computations. It is, among other, popular for the following reasons:
+
+1. It is developed and maintained by Google which comes with benefits like good integration in the Google Cloud
+2. It is open source
+3. It is fast 
+4. It is easy to deploy models in multiple target languages
+5. It comes with [TensorBoard](https://www.tensorflow.org/guide/summaries_and_tensorboard), a very useful browser-based tool to visualize the training process
+
+An interesting recent development in "deep learning" is that the technology developed there can be used to solve other problems. For example, recently a [*probabilistic programming module*](https://medium.com/tensorflow/introducing-tensorflow-probability-dca4c304e245) was added to TensorFlow. Another interesting application is the use of [TensorFlow for Markov Chain Monte Carlo (MCMC)](https://cran.r-project.org/web/packages/greta/index.html).
+
+# Setup
+
+## Installation
+
+Note that for using TensorFlow in R, two steps are necessary:
+
+1. The corresponding R-package has to be installed
+2. The Python TensorFlow library has to be installed as well
+
+Both steps can easily be done from within R:
+
+```{r, eval=FALSE}
+install.packages("tensorflow")
+tensorflow::install_tensorflow()
+```
+
+This, by default, installs the most recent version of TensorFlow for CPU. We won't cover the installation of TensorFlow for GPUs in this tutorial.
+
+## Packages
+
+Next, we load all the necessary packages. The main packages used for data handling come from the [tidyverse](https://www.tidyverse.org/).
+
+```{r, warning = FALSE, message = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  cache = TRUE
+)
+set.seed(1)
+library(tidyverse)
+library(rsample)
+library(scales)
+library(broom)
+library(recipes)
+library(tensorflow)
+library(zeallot)
+library(glue)
+library(CASdatasets)
+
+set.seed(1)                # Set R seed
+# use_session_with_seed(42)  # Set TensorFlow seed (does not work with GPU)
+```
+
+
+# Computational graphs
+
+In this section, we give a short background on the programming model used by TensorFlow since writing models in TensorFlow is quite different from, e.g. base R. TensorFlow is based on (static) **computational graphs**. A good reference for this section is [this website](https://tensorflow.rstudio.com/tensorflow/articles/basic_usage.html).
+
+At a very basic level, a computational graph consists of **tensors** and **operations**. A *tensor* is a generalization of vectors and matrices, but for the current tutorial it suffices to think of a tensor as either a vector or a matrix. Importantly, however, a **tensor does not have to be filled with values**. We can specify a tensor abstractly by declaring only its dimension. Examples of tensors will be the input features, the claim numbers, the exposure and the weights of the neural network. 
+
+*Operations*, as the name suggests, are mathematical operations that can be applied to one or more tensors. The results of operations are, again, tensors. For example, we can apply the exponential function to a tensor, or we can take the sum of two tensors giving rise to new tensors. In particular, when defining an operation **the underlying computation is not performed, only the "recipe" of what should be done is recorded**.
+
+Usually, training a neural network in TensorFlow involves two phases:
+
+1. Constructing the graph: in this phase we define all tensors and operations.
+2. Execution: here, we actually execute operations in the graph, usually by passing data to the input tensors (or *placeholders*) of the graph.
+
+Let us look at a very simple example, namely matrix multiplication. We start with the construction phase:
+
+```{r define-graph}
+W <- tf$constant(matrix(c(1.0, 1.0, 2.0, 0.5), nrow = 2), dtype = tf$float32)
+x <- tf$constant(matrix(c(1.0, 1.0), nrow = 2), dtype = tf$float32)
+prod <- tf$matmul(W, x)
+prod
+```
+
+We see that the result is a tensor, but it does not have a value yet. In order to perform the computation, we have to launch a **session** and perform the computation there:
+
+```{r}
+with(tf$Session() %as% sess, {
+  result <- sess$run(prod)
+})
+
+result
+```
+
+The code chunk `with(tf$Session() %as% sess, {...})` is equivalent to `sess <- tf$Session(); ...; sess$close()`.
+
+To train neural networks, it will be crucial to define another type of tensor, namely *placeholders*. These are tensors with no pre-specified values, into which data from the current R-session can be fed using the `feed_dict` argument in `sess$run`. In neural network training, these will be the features, the claim number and the exposure.
+
+```{r}
+# Graph is defined
+W <- tf$constant(matrix(c(1.0, 1.0, 2.0, 0.5), nrow = 2), dtype = tf$float32)
+x <- tf$placeholder(dtype = tf$float32, shape = c(2, 1)) # values are specified here
+prod <- tf$matmul(W, x)
+
+x_data <- matrix(c(2, 3), nrow = 2)
+
+with(tf$Session() %as% sess, {
+  # Actual data are used only here
+  result <- sess$run(prod, feed_dict = dict(x = x_data))
+})
+
+result
+```
+
+Another type of tensor that one encounters in TensorFlow are variables. They can be defined explicitly using `tf$Variable()` or implicitly by calling, for example, `tf$layers$dense`. This call initializes a bias tensor and a weight tensor in the background. Variables are the tensors that are usually learnt.
+
+# Data preprocessing
+
+After this short introduction to the TensorFlow programming model, we can now start with the data processing steps.
+
+The data preprocessing and splitting is described in Secion 1 of the [first paper](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3164764) and done very similarly as in the [H2O tutorial](LINK TO BE INSERTED). We start with the data split:
+
+```{r}
+data(freMTPL2freq)
+glimpse(freMTPL2freq)
+
+dat <- freMTPL2freq %>% 
+  as_tibble() %>% 
+  mutate_at(vars(VehPower, VehGas), factor) %>% 
+  mutate(Exposure = if_else(Exposure > 1, 1, Exposure),
+         ClaimNb = if_else(ClaimNb > 4, 4, ClaimNb))
+
+set.seed(100)
+ll <- sample(1:nrow(dat), round(0.9 * nrow(dat)), replace = FALSE)
+train <- dat[ll, ] 
+test <- dat[-ll, ]
+```
+
+The preprocessing is done using the [recipes](https://cran.r-project.org/web/packages/recipes/index.html) API and consists of centering and scaling the numeric variables and converting categorical variables to dummies.
+
+We also define a helper function `prep_data` that takes the trained `recipes` object and a dataset `df` as argument and returns the features as matrix and both the claim count and exposure as vector.
+
+```{r}
+# Define recipe object
+rec_obj <- recipe(ClaimNb ~ Area + VehPower + VehAge + DrivAge + BonusMalus +
+                    VehBrand + VehGas + Density + Region,
+                  data = train) %>% 
+  step_center(all_numeric(), -all_outcomes()) %>% 
+  step_scale(all_numeric(), -all_outcomes()) %>% 
+  step_dummy(all_nominal()) %>% 
+  prep()
+
+# Define helper function that returns the features, the claims and the exposure
+prep_data <- function(rec_obj, df) {
+  data_prepped <- bake(rec_obj, newdata = df)
+  x <- data_prepped %>% select(-ClaimNb) %>% as.matrix() %>% `rownames<-`(NULL) %>% `colnames<-`(NULL)
+  y <- df %>% select(ClaimNb) %>% as.matrix(ncol = 1) %>% `rownames<-`(NULL) %>% `colnames<-`(NULL)
+  exposure <- df %>% select(Exposure) %>% as.matrix(ncol = 1) %>% `rownames<-`(NULL) %>% `colnames<-`(NULL)
+  
+  list(x, y, exposure)
+}
+
+# Apply helper function to training and testing set
+c(train_x, train_y, train_exposure) %<-% prep_data(rec_obj, train)
+c(test_x, test_y, test_exposure) %<-% prep_data(rec_obj, test)
+```
+
+# Generalized Linear Models
+
+## Test TensorFlow predictions
+
+Now, we can define the computational graph for doing Poisson regression. We restrict to three input variables in a first step, just to easily see that we can reproduce the results from the `glm` function in base R.
+
+We split the structure of the graph into 4 components (or "name scopes"). Defining these name scopes is not necessary, but it makes debugging the code a lot easier, especially in combination with the powerful TensorBoard visualization tool (which we’ll not use in this tutorial).
+
+These are the four name scopes of the graph:
+
+1. Input: here, we define what goes into the graph. These tensors are *placeholders* so that we can feed them with actual data. In the case at hand, these are the *features* `x`, the *exposure* and the observed *claim numbers* `y`.
+1. Predicition: in this layer, we take the `x` tensor from the input layer, pass it through a dense layer (`tf$layers$dense`) with one output unit (`units = 1L`) to obtain the activations. As the activations are the logarithm of the predicted claims counts, we apply `tf$exp` to them to obtain the predictions.
+1. Loss function: the predictions and the actual counts are combined to get the values of the loss function.
+1. Optimizer: here, we define the optimization algorithm, including all of its parameters (which, with the exception of the learning rate, we leave at default values here), and declare what the optimization goal is.
+
+```{r}
+tf$reset_default_graph()
+# Set "global" parameters
+n_x <- 3
+learning_rate <- 0.002
+
+with(tf$name_scope("input/"), {
+  # shape(NULL, n_x) means that an arbitrary number of rows can be passed to x
+  x <- tf$placeholder(tf$float32, name = "x", shape = shape(NULL, n_x))
+  y <- tf$placeholder(tf$float32, name = "claim_count", shape = shape(NULL, 1))
+  exposure <- tf$placeholder(tf$float32, name = "exposure", shape = shape(NULL, 1))
+})
+
+with(tf$name_scope("output/"), {
+
+  activations <- tf$layers$dense(
+    inputs = x, units = 1L,
+    # Initialize with sensible weights http://arxiv.org/abs/1502.01852
+    kernel_initializer = tf$keras$initializers$he_normal()
+    ) 
+  
+  predictions <- activations %>% tf$exp()
+})
+
+# Extract the weights from the layer
+weights <- tf$get_default_graph()$get_tensor_by_name("dense/kernel:0")
+
+with(tf$name_scope("loss/"), {
+  loss <- - tf$reduce_mean(y * tf$log(predictions) - predictions * exposure)
+})
+
+with(tf$name_scope("optimizer/"), {
+  optimizer <- tf$train$RMSPropOptimizer(learning_rate)$minimize(loss)
+})
+```
+
+Having defined the graph, we can now proceed with the actual training. This step requires a lot more code than the Keras equivalent (which was used in the accompanying paper). The structure of the code is, however, easy to understand.
+
+We initialize a TensorFlow session, that is automatically closed after the training, with `with(tf$Session() %as% sess, {...})`. Within the session `sess`, we perform the following steps:
+
+1. Setup: Initialize all variables
+1. In the loop over the episodes, we pass in the training data to the optimizer via the `feed_dict` argument of the `sess$run` method. This runs backpropagation.
+1. Every 50 episodes we print the current training loss.
+1. After the loop over the epsiodes we extract the weights and the predictions.
+
+```{r}
+# Set "global" parameters
+n_epochs <- 4000
+print_every <- 50
+keep_print_every <- 500
+
+
+train_nn <- function(n_epochs, n_x) {
+  with(tf$Session() %as% sess, {
+    # Setup
+    cat("Starting the training \n")
+    sess$run(tf$global_variables_initializer()) 
+    
+    for (epoch in 1:n_epochs) {
+      # Pass training data to optimizer
+      sess$run(optimizer, feed_dict = dict(x = train_x[, 1:n_x],
+                                           y = train_y[, , drop = FALSE],
+                                           exposure = train_exposure[, , drop = FALSE]))
+      
+      # Print every `print_every` epochs
+      if (epoch %% print_every == 0) {
+        loss_ <- sess$run(loss, feed_dict = dict(x = train_x[, 1:n_x],
+                                                 y = train_y[, , drop = FALSE],
+                                                 exposure = train_exposure[, , drop = FALSE]))
+        glue("Loss in epoch {epoch} is {round(loss_, 4)} \r") %>% cat
+        if (epoch %% keep_print_every == 0) {
+          cat("\n")
+        }
+      }
+    }
+    # Get weights
+    final_weights <- sess$run(weights)
+    # Get predictions
+    preds_train <- sess$run(predictions,
+                            feed_dict = dict(x = train_x[, 1:n_x],
+                                             y = train_y[, , drop = FALSE],
+                                             exposure = train_exposure[, , drop = FALSE]))
+    
+    preds_test <- sess$run(predictions,
+                           feed_dict = dict(x = test_x[, 1:n_x],
+                                            y = test_y[, , drop = FALSE],
+                                            exposure = test_exposure[, , drop = FALSE]))
+    
+    # Return
+    list(preds_train = preds_train, preds_test = preds_test, weights = final_weights)
+  })
+}
+
+c(preds, preds_test, final_weights) %<-% train_nn(n_epochs = n_epochs, n_x = 3)
+```
+
+Let us check that the weights and predictions agree with the ones from calling the `glm` function in R:
+
+```{r}
+# Fit glm: n_x + 1 comes from intercept term
+r_glm <- glm(ClaimNb ~ ., 
+             data = bake(rec_obj, newdata = train) %>% select(1:(n_x + 1)),
+             family = poisson(link = log),
+             offset = log(train$Exposure)) 
+
+# Get coefficients from the broom package
+tidy(r_glm) %>% 
+  filter(term != "(Intercept)") %>% 
+  select(Term = term, `Weights from GLM` = estimate) %>% 
+  mutate(`Weights from TensorFlow` = final_weights) %>% 
+  knitr::kable()
+
+# Compare predictions made by two differnt fits
+r_glm %>%
+  augment() %>% 
+  mutate(.fitted = exp(.fitted)) %>%
+  mutate(exposure = exp(X.offset.)) %>% 
+  mutate(pred_tf = as.numeric(preds) * exposure) %>% 
+  sample_n(10000) %>% 
+  ggplot(aes(.fitted, pred_tf)) + 
+  geom_point() +
+  ggtitle("TensorFlow predictions match those from base R") +
+  labs(x = "Base R Predictions",
+       y = "TensorFlow predictions")
+```
+
+Note that the coefficients are almost identical. The differences stem from the fact that we use numerical optimization.
+
+# Shallow networks
+
+Next, we define a neural network with a single hidden layer, also called a *shallow network* in Section 1.3 of the [paper](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3226852). The difference to the network in the paper is that we keep a model with offset (i.e. we set the coefficient of the `Exposure` to one). The definition of the graph is similar to the case of the Poisson GLM. The difference is that the input `x` is passed to the hidden layer `hidden`, which, in turn, passes the data over to the `activations` tensor.
+
+```{r}
+tf$reset_default_graph()
+n_x <- ncol(train_x)
+learning_rate <- 0.003
+
+with(tf$name_scope("input/"), {
+  x <- tf$placeholder(tf$float32, name = "x", shape = shape(NULL, n_x))
+  y <- tf$placeholder(tf$float32, name = "claim_count", shape = shape(NULL, 1))
+  exposure <- tf$placeholder(tf$float32, name = "exposure", shape = shape(NULL, 1))
+})
+
+with(tf$name_scope("hidden"), {
+  hidden <- tf$layers$dense(inputs = x, units = 20L,
+                            kernel_initializer = tf$keras$initializers$he_normal(),
+                            activation = tf$nn$relu)
+})
+
+with(tf$name_scope("output/"), {
+  activations <- tf$layers$dense(inputs = hidden, units = 1L,
+                                 kernel_initializer = tf$keras$initializers$he_normal()) 
+  
+  predictions <- activations %>% tf$exp()
+})
+
+weights <- tf$get_default_graph()$get_tensor_by_name("dense/kernel:0")
+
+with(tf$name_scope("loss/"), {
+  deviance <- tf$reduce_mean(2 * y * (predictions / y - 1 - log(predictions / y)))
+  loss <- - tf$reduce_mean(y * tf$log(predictions) - predictions * exposure)
+
+})
+
+with(tf$name_scope("optimizer/"), {
+  optimizer <- tf$train$RMSPropOptimizer(learning_rate)$minimize(loss)
+})
+
+with(tf$name_scope("summaries"), {
+  tf$summary$histogram("weights", weights)
+})
+## Tensor("summaries/weights:0", shape=(), dtype=string)
+```
+
+We train the model over 1000 epochs.
+
+```{r}
+keep_print_every <- 200
+train <- function(n_epochs) {
+  
+  with(tf$Session() %as% sess, {
+    cat("Starting the training \n")
+    sess$run(tf$global_variables_initializer()) 
+    
+    for (epoch in 1:n_epochs) {
+      sess$run(optimizer, feed_dict = dict(x = train_x[, 1:n_x],
+                                           y = train_y[, , drop = FALSE],
+                                           exposure = train_exposure[, , drop = FALSE]))
+      
+      if (epoch %% print_every == 0) {
+        loss_ <- sess$run(loss, feed_dict = dict(x = train_x[, 1:n_x],
+                                                 y = train_y[, , drop = FALSE],
+                                                 exposure = train_exposure[, , drop = FALSE]))
+        
+        loss_test <- sess$run(loss, feed_dict = dict(x = test_x[, 1:n_x],
+                                                   y = test_y[, , drop = FALSE],
+                                                   exposure = test_exposure[, , drop = FALSE]))
+        
+        glue("Training loss in epoch {epoch} is {round(loss_, 3)}; Test loss is {round(loss_test, 3)} \r") %>% cat
+        if (epoch %% keep_print_every == 0) {
+          cat("\n")
+        }
+      }
+    }
+    preds <- sess$run(predictions, feed_dict = dict(x = train_x[, 1:n_x],
+                                                    y = train_y[, , drop = FALSE],
+                                                    exposure = train_exposure[, , drop = FALSE]))
+    
+    preds_test <- sess$run(predictions, feed_dict = dict(x = test_x[, 1:n_x],
+                                                         y = test_y[, , drop = FALSE],
+                                                         exposure = test_exposure[, , drop = FALSE]))
+  })
+  
+  list(preds_train = preds, preds_test = preds_test)
+}
+
+preds_tf <- train(1000)
+```
+
+Note that there is already evidence of overfitting, since the validation loss is a bit higher than the training loss.
+
+We evaluate the model and compute the residual deviance.
+
+```{r}
+get_deviance <- function(y_true, y_pred) {
+  if_else(y_true == 0,
+          2 * y_pred,
+          2 * y_true * (y_pred / y_true - 1 - log(y_pred / y_true)))
+}
+
+deviance_df <- tibble(ClaimNb = test_y[, 1]) %>% 
+  mutate(.fitted = as.numeric(preds_tf[[2]] * test_exposure)) %>% 
+  mutate(deviance = get_deviance(ClaimNb, .fitted)) %>% 
+  summarise(deviance = mean(deviance)) %>% 
+  mutate(model = "NN-1") %>% 
+  select(model, deviance) %>% 
+  add_row(model = "GLM", deviance = 0.321) %>% 
+  arrange(model)
+
+deviance_df %>% 
+  knitr::kable(digits = 3)
+```
+
+It’s 0.318, quite a bit lower than the GLM (which has 0.321). This is evidence that there are non-linearities in the claim frequencies as discussed in the paper in more detail.
+
+# Deep network with two hidden layers
+
+Next, we try a network with 2 hidden layers, with 100 and 50 hidden units, respectively. Also we introduce two dropout layers after the hidden layers with a dropout rate of 25%. For a discussion of dropout, see Section 5.
+
+```{r}
+tf$reset_default_graph()
+n_x <- 52
+learning_rate <- 0.003
+
+with(tf$name_scope("input/"), {
+  x <- tf$placeholder(tf$float32, name = "x", shape = shape(NULL, n_x))
+  y <- tf$placeholder(tf$float32, name = "claim_count", shape = shape(NULL, 1))
+  exposure <- tf$placeholder(tf$float32, name = "exposure", shape = shape(NULL, 1))
+  train_flag <- tf$placeholder(tf$bool)
+})
+
+with(tf$name_scope("hidden1"), {
+  hidden1 <- tf$layers$dense(inputs = x, units = 100,
+                             kernel_initializer = tf$keras$initializers$he_normal(),
+                             activation = tf$nn$relu) %>% 
+    tf$layers$dropout(training = train_flag, rate = 0.25) # Add dropout
+  
+})
+
+with(tf$name_scope("hidden2"), {
+  hidden2 <- tf$layers$dense(inputs = hidden1, units = 50,
+                            kernel_initializer = tf$keras$initializers$he_normal(),
+                            activation = tf$nn$relu) %>% 
+    tf$layers$dropout(training = train_flag, rate = 0.25)
+})
+
+with(tf$name_scope("output/"), {
+  activations <- tf$layers$dense(inputs = hidden2, units = 1L,
+                                 kernel_initializer = tf$keras$initializers$he_normal()) 
+  
+  predictions <- activations %>% tf$exp()
+})
+
+weights <- tf$get_default_graph()$get_tensor_by_name("dense/kernel:0")
+
+with(tf$name_scope("loss/"), {
+  deviance <- tf$reduce_mean(2 * y * (predictions / y - 1 - log(predictions / y)))
+  loss <- - tf$reduce_mean(y * tf$log(predictions) - predictions * exposure)
+
+})
+
+with(tf$name_scope("optimizer/"), {
+  optimizer <- tf$train$RMSPropOptimizer(learning_rate)$minimize(loss)
+})
+```
+
+In the training function, we need to be careful to pass the `train_flag` parameter. When we run the optimizer, we set `train_flag = TRUE` meaning that the dropout layers should be applied. On the other hand, when we calculate the loss on the test data, we set `train_flag = FALSE`, so that the full weights are used.
+
+```{r}
+train <- function(n_epochs) {
+  
+  with(tf$Session() %as% sess, {
+    cat("Starting the training \n")
+    sess$run(tf$global_variables_initializer()) 
+    
+    for (epoch in 1:n_epochs) {
+      sess$run(optimizer, feed_dict = dict(x = train_x[, 1:n_x],
+                                           y = train_y[, , drop = FALSE],
+                                           exposure = train_exposure[, , drop = FALSE],
+                                           train_flag = TRUE)) # Use dropout
+      
+      if (epoch %% print_every == 0) {
+        loss_ <- sess$run(loss, feed_dict = dict(x = train_x[, 1:n_x],
+                                                 y = train_y[, , drop = FALSE],
+                                                 exposure = train_exposure[, , drop = FALSE],
+                                                 train_flag = FALSE)) # Don't use dropout
+        
+        loss_test <- sess$run(loss, feed_dict = dict(x = test_x[, 1:n_x],
+                                                     y = test_y[, , drop = FALSE],
+                                                     exposure = test_exposure[, , drop = FALSE],
+                                                     train_flag = FALSE))
+        
+        glue("Training loss in epoch {epoch} is {round(loss_, 3)}; Test loss is {round(loss_test, 3)} \r") %>% cat
+        if (epoch %% keep_print_every == 0) {
+          cat("\n")
+        }
+      }
+    }
+    preds <- sess$run(predictions, feed_dict = dict(x = train_x[, 1:n_x],
+                                                    y = train_y[, , drop = FALSE],
+                                                    exposure = train_exposure[, , drop = FALSE],
+                                                    train_flag = FALSE)) 
+    
+    preds_test <- sess$run(predictions, feed_dict = dict(x = test_x[, 1:n_x],
+                                                         y = test_y[, , drop = FALSE],
+                                                         exposure = test_exposure[, , drop = FALSE],
+                                                         train_flag = FALSE))
+  })
+  
+  list(preds_train = preds, preds_test = preds_test)
+}
+```
+
+We train for 1000 epochs and then evaluate the deviance.
+
+```{r}
+preds_tf <- train(1000)
+```
+
+```{r}
+deviance_df <- tibble(ClaimNb = test_y[, 1]) %>% 
+  mutate(.fitted = as.numeric(preds_tf[[2]] * test_exposure)) %>% 
+  mutate(deviance = get_deviance(ClaimNb, .fitted)) %>% 
+  summarise(deviance = mean(deviance)) %>%
+  mutate(model = "NN-2") %>% 
+  bind_rows(deviance_df, .)
+
+deviance_df %>% 
+  knitr::kable(digits = 3)
+```
+
+With two hidden layers, the test deviance is even lower than with a single hidden layer.
+
+# Deep network with three hidden layers
+
+Next, we try a neural network with three hidden layers:
+
+```{r}
+tf$reset_default_graph()
+n_x <- 52
+learning_rate <- 0.003
+
+with(tf$name_scope("input/"), {
+  x <- tf$placeholder(tf$float32, name = "x", shape = shape(NULL, n_x))
+  y <- tf$placeholder(tf$float32, name = "claim_count", shape = shape(NULL, 1))
+  exposure <- tf$placeholder(tf$float32, name = "exposure", shape = shape(NULL, 1))
+  train_flag <- tf$placeholder(tf$bool)
+})
+
+with(tf$name_scope("hidden1"), {
+  hidden1 <- tf$layers$dense(inputs = x, units = 100,
+                             kernel_initializer = tf$keras$initializers$he_normal(),
+                             activation = tf$nn$relu) %>% 
+    tf$layers$dropout(training = train_flag, rate = 0.25)
+  
+})
+
+with(tf$name_scope("hidden2"), {
+  hidden2 <- tf$layers$dense(inputs = hidden1, units = 50,
+                            kernel_initializer = tf$keras$initializers$he_normal(),
+                            activation = tf$nn$relu) %>% 
+    tf$layers$dropout(training = train_flag, rate = 0.25)
+})
+
+with(tf$name_scope("hidden3"), {
+  hidden3 <- tf$layers$dense(inputs = hidden2, units = 50,
+                            kernel_initializer = tf$keras$initializers$he_normal(),
+                            activation = tf$nn$relu) %>% 
+    tf$layers$dropout(training = train_flag, rate = 0.25)
+})
+
+with(tf$name_scope("output/"), {
+  activations <- tf$layers$dense(inputs = hidden3, units = 1L,
+                                 kernel_initializer = tf$keras$initializers$he_normal()) 
+  
+  predictions <- activations %>% tf$exp()
+})
+
+weights <- tf$get_default_graph()$get_tensor_by_name("dense/kernel:0")
+
+with(tf$name_scope("loss/"), {
+  deviance <- tf$reduce_mean(2 * y * (predictions / y - 1 - log(predictions / y)))
+  loss <- - tf$reduce_mean(y * tf$log(predictions) - predictions * exposure)
+
+})
+
+with(tf$name_scope("optimizer/"), {
+  optimizer <- tf$train$RMSPropOptimizer(learning_rate)$minimize(loss)
+})
+
+with(tf$name_scope("summaries"), {
+  tf$summary$histogram("weights", weights)
+})
+```
+
+```{r}
+preds_tf <- train(1000)
+```
+
+```{r}
+deviance_df <- tibble(ClaimNb = test_y[, 1]) %>% 
+  mutate(.fitted = as.numeric(preds_tf[[2]] * test_exposure)) %>% 
+  mutate(deviance = get_deviance(ClaimNb, .fitted)) %>% 
+  summarise(deviance = mean(deviance)) %>%
+  mutate(model = "NN-3") %>% 
+  bind_rows(deviance_df, .)
+
+deviance_df %>% 
+  knitr::kable(digits = 3)
+```
+
+The model with three hidden layers performs slightly better than the two hidden layer model on the test set.
+
+A plot of the (marginal) dependency of the prediction on predictor variables can be produced as follows, e.g. for `BonusMalus`.
+
+```{r}
+tibble(ClaimNb = test_y[, 1]) %>% 
+  mutate(.fitted = as.numeric(preds_tf[[2]] * test_exposure)) %>% 
+  mutate(BonusMalus = test$BonusMalus) %>% 
+  ggplot(aes(BonusMalus, .fitted)) + 
+  geom_smooth()
+```
+
+# Deep network with four hidden layers
+
+Finally, we try a deep network with 4 hidden layers.
+
+```{r}
+tf$reset_default_graph()
+n_x <- 52
+learning_rate <- 0.003
+
+with(tf$name_scope("input/"), {
+  x <- tf$placeholder(tf$float32, name = "x", shape = shape(NULL, n_x))
+  y <- tf$placeholder(tf$float32, name = "claim_count", shape = shape(NULL, 1))
+  exposure <- tf$placeholder(tf$float32, name = "exposure", shape = shape(NULL, 1))
+  train_flag <- tf$placeholder(tf$bool)
+})
+
+with(tf$name_scope("hidden1"), {
+  hidden1 <- tf$layers$dense(inputs = x, units = 100,
+                             kernel_initializer = tf$keras$initializers$he_normal(),
+                             activation = tf$nn$relu) %>% 
+    tf$layers$dropout(training = train_flag, rate = 0.25)
+  
+})
+
+with(tf$name_scope("hidden2"), {
+  hidden2 <- tf$layers$dense(inputs = hidden1, units = 50,
+                            kernel_initializer = tf$keras$initializers$he_normal(),
+                            activation = tf$nn$relu) %>% 
+    tf$layers$dropout(training = train_flag, rate = 0.25)
+})
+
+with(tf$name_scope("hidden3"), {
+  hidden3 <- tf$layers$dense(inputs = hidden2, units = 50,
+                            kernel_initializer = tf$keras$initializers$he_normal(),
+                            activation = tf$nn$relu) %>% 
+    tf$layers$dropout(training = train_flag, rate = 0.25)
+})
+
+with(tf$name_scope("hidden4"), {
+  hidden4 <- tf$layers$dense(inputs = hidden3, units = 50,
+                            kernel_initializer = tf$keras$initializers$he_normal(),
+                            activation = tf$nn$relu) %>% 
+    tf$layers$dropout(training = train_flag, rate = 0.25)
+})
+
+with(tf$name_scope("output/"), {
+  activations <- tf$layers$dense(inputs = hidden4, units = 1L,
+                                 kernel_initializer = tf$keras$initializers$he_normal()) 
+  
+  predictions <- activations %>% tf$exp()
+})
+
+weights <- tf$get_default_graph()$get_tensor_by_name("dense/kernel:0")
+
+with(tf$name_scope("loss/"), {
+  deviance <- tf$reduce_mean(2 * y * (predictions / y - 1 - log(predictions / y)))
+  loss <- - tf$reduce_mean(y * tf$log(predictions) - predictions * exposure)
+
+})
+
+with(tf$name_scope("optimizer/"), {
+  optimizer <- tf$train$RMSPropOptimizer(learning_rate)$minimize(loss)
+})
+
+with(tf$name_scope("summaries"), {
+  tf$summary$histogram("weights", weights)
+})
+## Tensor("summaries/weights:0", shape=(), dtype=string)
+```
+
+```{r}
+preds_tf <- train(1000)
+```
+
+```{r}
+deviance_df <- tibble(ClaimNb = test_y[, 1]) %>% 
+  mutate(.fitted = as.numeric(preds_tf[[2]] * test_exposure)) %>% 
+  mutate(deviance = get_deviance(ClaimNb, .fitted)) %>% 
+  summarise(deviance = mean(deviance)) %>%
+  mutate(model = "NN-4") %>% 
+  bind_rows(deviance_df, .)
+```
+
+# Summary
+
+We give a summary table of the performance of the various models:
+
+```{r}
+deviance_df %>% 
+  knitr::kable(digits = 3)
+```
+
+Note that the results here are not directly comparable to table 10 in the paper. The reason is that in this tutorial, we did **Poisson regression with offset**, i.e. we set the coefficient of `Exposure` to one. Optimizing for this coefficient as well reduces the in-sample and out-of-sample loss significantly and gets the results closer to the ones from the paper.
+
+The general pattern from Table 10 can, however, be observed also in this case: the shallow network performs worse than deep networks. Among the deep networks, one can see an improvement when going from two hidden layers to three hidden layers. In this tutorial, we find that 4 hidden layers work slightly worse than three hidden layers, which is the same as Table 10. We should note, however, that two-, three- and four-layer networks perform similarly well. The difference can come purely from random variation.
+
+
+
