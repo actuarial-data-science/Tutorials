@@ -8,3 +8,8 @@ Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3164764
 ## 2 - Inisghts from Inside Neural Networks
 
 Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3226852
+
+## 3 - Nesting Classical Actuarial Models into Neural Networks
+
+Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3320525
+
