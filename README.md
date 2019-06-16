@@ -13,3 +13,6 @@ Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3226852
 
 Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3320525
 
+## 4 - On Boosting: Theory and Applications
+
+Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3402687
