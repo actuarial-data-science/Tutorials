@@ -14,4 +14,4 @@ available from https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3439358.
 - 05 t-SNE UMAP SOM.R
 
 ### Data
-- SportsCars.xlsx
+- SportsCars.csv
