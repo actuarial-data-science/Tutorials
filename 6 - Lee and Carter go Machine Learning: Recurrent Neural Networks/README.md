@@ -1,6 +1,6 @@
 # 6 - Lee and Carter go Machine Learning: Recurrent Neural Networks
 
-Here you find the code to the article "Lee and Carter go Machine Learning: Recurrent Neural Networks" from R. Richman and M. Wüthrich, available from https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3441030.
+Here you find the code to the article "Lee and Carter go Machine Learning: Recurrent Neural Networks" from R. Richman and M.V. Wüthrich, available from https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3441030.
 
 
 ### R Code
