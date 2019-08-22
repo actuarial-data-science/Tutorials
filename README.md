@@ -16,3 +16,12 @@ Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3320525
 ## 4 - On Boosting: Theory and Applications
 
 Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3402687
+
+## 5 - Unsupervised Learning: What is a Sports Car?
+
+Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3439358
+
+## 6 - Lee and Carter go Machine Learning: Recurrent Neural Networks
+
+Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3441030
+
