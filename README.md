@@ -25,3 +25,6 @@ Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3439358
 
 Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3441030
 
+## 7 - The Art of Natural Language Programming
+
+Article: tbd
