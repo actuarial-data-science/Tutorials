@@ -4,13 +4,19 @@ Here you find the code to the article "Case Study: French Motor Third-Party Liab
 
 ### Standard R Code
 - Parameters_NN
-- FreMTPL2 Part 1 (GLM, RT, PBM).r
-- FreMTPL2 Part 2 (neural net).r
+- Tools
+- FreMTPL_0 install and start.r
+- FreMTPL_2 benchmark GLM.r
+- FreMTPL_3 regression trees.r
+- FreMTPL_4 boosting machine.r
+- FreMTPL_5 neural net - dummy coding.r
 
-### R Code using Tensorflow
+### R Code using Tensorflow*
 - FreMTPL_TensorFlow.nb.html
 - FreMTPL_TensorFlow.Rmd
 
-### R Code using H2O
+### R Code using H2O*
 - FreMTPL_h2o.html
 - FreMTPL_h2o.Rmd
+
+*Those files are based on the initial version of the code.
