@@ -1,0 +1,115 @@
+Ind;Rname;Name
+1;Nord;Nord-Pas-de-Calais
+2;Pas-de-Calais;Nord-Pas-de-Calais
+3;Somme;Picardie
+4;Nord:1;Nord-Pas-de-Calais
+5;Ardennes;Champagne-Ardenne
+6;Seine-Maritime;Haute-Normandie
+7;Aisne;Picardie
+8;Oise;Picardie
+9;Manche;Basse-Normandie
+10;Meuse;Lorraine
+11;Meurthe-et-Moselle;Lorraine
+12;Moselle;Lorraine
+13;Eure;Haute-Normandie
+14;Calvados;Basse-Normandie
+15;Marne;Champagne-Ardenne
+16;Val-Doise;Ile-de-France
+17;Yvelines;Ile-de-France
+18;Seine-et-Marne;Ile-de-France
+19;Bas-Rhin;Alsace
+20;Seine-Saint-Denis;Ile-de-France
+21;Orne;Basse-Normandie
+22;Hauts-de-Seine;Ile-de-France
+23;Eure-et-Loir;Centre
+24;Paris;Ile-de-France
+25;Cotes-Darmor;Brittany - Bretagne
+26;Val-de-Marne;Ile-de-France
+27;Cotes-Darmor:I. de Brehat;Brittany - Bretagne
+28;Essonne;Ile-de-France
+29;Finistere:I. de Batz;Brittany - Bretagne
+30;Finistere;Brittany - Bretagne
+31;Aube;Champagne-Ardenne
+32;Ille-et-Vilaine;Brittany - Bretagne
+33;Haute-Marne;Champagne-Ardenne
+34;Mayenne;Pays de la Loire
+35;Vosges;Lorraine
+36;Sarthe;Pays de la Loire
+37;Finistere:I. d'Ouessant;Brittany - Bretagne
+38;Yonne;Bourgogne
+39;Loiret;Centre
+40;Haut-Rhin;Alsace
+41;Morbihan;Brittany - Bretagne
+42;Loir-et-Cher;Centre
+43;Cote-Dor;Bourgogne
+44;Haute-Saone;Franche-Comté
+45;Loire-Atlantique;Pays de la Loire
+46;Maine-et-Loire;Pays de la Loire
+47;Territoire de Belfort;Franche-Comté
+48;Indre-et-Loire;Centre
+49;Morbihan:I. de Groix;Brittany - Bretagne
+50;Cher;Centre
+51;Nievre;Bourgogne
+52;Doubs;Franche-Comté
+53;Morbihan:I. Houat;Brittany - Bretagne
+54;Morbihan:Belle Ile;Brittany - Bretagne
+55;Morbihan:I. Hoedic;Brittany - Bretagne
+56;Jura;Franche-Comté
+57;Indre;Centre
+58;Vienne;Poitou-Charentes
+59;Saone-et-Loire;Bourgogne
+60;Deux-Sevres;Poitou-Charentes
+61;Vendee;Pays de la Loire
+62;Vendee:I. de Noirmoutier;Pays de la Loire
+63;Allier;Auvergne
+64;Vendee:I. d'Yeu;Pays de la Loire
+65;Ain;Rhône-Alpes
+66;Haute-Savoie;Rhône-Alpes
+67;Creuse;Limousin
+68;Haute-Vienne;Limousin
+69;Charente-Maritime;Poitou-Charentes
+70;Rhone;Rhône-Alpes
+71;Puy-de-Dome;Auvergne
+72;Charente-Maritime:I. de Re;Poitou-Charentes
+73;Loire;Rhône-Alpes
+74;Charente;Poitou-Charentes
+75;Charente-Maritime:I. d'Oleron;Poitou-Charentes
+76;Savoie;Rhône-Alpes
+77;Isere;Rhône-Alpes
+78;Correze;Limousin
+79;Dordogne;Aquitaine
+80;Gironde;Aquitaine
+81;Cantal;Auvergne
+82;Haute-Loire;Auvergne
+83;Drome;Rhône-Alpes
+84;Ardeche;Rhône-Alpes
+85;Hautes-Alpes;Provence Alpes Côte-d'Azur (PACA)
+86;Lot;Midi-Pyrénées
+87;Lozere;Languedoc-Roussillon
+88;Aveyron;Midi-Pyrénées
+89;Lot-et-Garonne;Aquitaine
+90;Alpes-de-Haute-Provence;Provence Alpes Côte-d'Azur (PACA)
+91;Landes;Aquitaine
+92;Gard;Languedoc-Roussillon
+93;Vaucluse:Enclave des Papes;Provence Alpes Côte-d'Azur (PACA)
+94;Tarn-et-Garonne;Midi-Pyrénées
+95;Alpes-Maritimes;Provence Alpes Côte-d'Azur (PACA)
+96;Vaucluse;Provence Alpes Côte-d'Azur (PACA)
+97;Tarn;Midi-Pyrénées
+98;Gers;Midi-Pyrénées
+99;Herault;Languedoc-Roussillon
+100;Bouches-du-Rhone;Provence Alpes Côte-d'Azur (PACA)
+101;Haute-Garonne;Midi-Pyrénées
+102;Var;Provence Alpes Côte-d'Azur (PACA)
+103;Hautes-Pyrenees;Midi-Pyrénées
+104;Pyrenees-Atlantiques;Aquitaine
+105;Aude;Languedoc-Roussillon
+106;Hautes-Pyrenees:1;Midi-Pyrénées
+107;Ariege;Midi-Pyrénées
+108;Hautes-Pyrenees:2;Midi-Pyrénées
+109;Var:Iles d'Hyeres:I. du Levant;Provence Alpes Côte-d'Azur (PACA)
+110;Var:Iles d'Hyeres:I. de Porquerolles;Provence Alpes Côte-d'Azur (PACA)
+111;Var:Iles d'Hyeres:I. de Port Cros;Provence Alpes Côte-d'Azur (PACA)
+112;Haute-Corse;Corsica (Corse)
+113;Pyrenees-Orientales;Languedoc-Roussillon
+114;Corse du Sud;Corsica (Corse)
