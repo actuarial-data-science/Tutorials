@@ -17,7 +17,7 @@ Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3320525
 
 Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3402687
 
-## 5 - Unsupervised Learning: What is a Sports Car?
+## 5 - Unsupervised Learning: What is a Sports Car
 
 Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3439358
 
