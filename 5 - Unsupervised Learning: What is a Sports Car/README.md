@@ -1,4 +1,4 @@
-# 5 - Unsupervised Learning: What is a Sports Car?
+# 5 - Unsupervised Learning: What is a Sports Car
 
 Here you find the code to the article "Unsupervised Learning: What is a Sports Car?" from S. Rentzmann and M.V. Wüthrich,
 available from https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3439358.
