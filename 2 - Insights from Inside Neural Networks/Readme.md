@@ -6,5 +6,8 @@ available from https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3226852.
 
 ### Standard R Code
 - Parameters
+- Tools
+  - V0_1 pre_process data.r
+  - V0_2 network architectures.r
 - V1 preprocess data.r
 - V2 KERAS network architecture.r
