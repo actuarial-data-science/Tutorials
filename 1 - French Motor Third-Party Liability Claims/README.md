@@ -3,7 +3,7 @@
 Here you find the code to the article "Case Study: French Motor Third-Party Liability Claims" from A. Noll, R. Salzmann and M.V. Wüthrich, available from https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3164764.
 
 ### Standard R Code
-- Parameters_NN
+- Parameters
 - Tools
 - FreMTPL_0 install and start.r
 - FreMTPL_2 benchmark GLM.r
