@@ -28,3 +28,7 @@ Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3441030
 ## 7 - The Art of Natural Language Processing
 
 Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3547887
+
+## 8 - Peeking into the Black Box
+
+Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3595944
