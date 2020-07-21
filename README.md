@@ -32,3 +32,7 @@ Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3547887
 ## 8 - Peeking into the Black Box
 
 Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3595944
+
+## 9 - Convolutional neural network case studies
+
+Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3656210
