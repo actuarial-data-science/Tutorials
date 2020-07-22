@@ -4,9 +4,11 @@ Here you find the code to the article "Convolutional neural network case studies
 
 ### Python Notebooks
 - cnn1.ipynb
-- cann1.html
+- cnn1.html
+- cnn1.zip
 - cnn2.ipynb
 - cnn2.html
+- cnn2.zip
 
 ### Data
 - mortality rates
