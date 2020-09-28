@@ -1,9 +1,8 @@
-
 # *The Art of Natural Language Processing: NLP Pipeline*
 
 ### **Authors: Andrea Ferrario, Mara Nägelin**
 
-**Date: February 2020**
+**Date: February 2020** (updated September 2020)
 
 Notebook to test NLP preprocessing pipelines, as described in the tutorial `The Art of Natural Language Processing: Classical, Modern and Contemporary Approaches to Text Document Classification'.
 
@@ -37,6 +36,10 @@ display(HTML("<style>.container { width:100% !important; }</style>"))
 %matplotlib inline
 ```
 
+
+<style>.container { width:100% !important; }</style>
+
+
 # 2. Test sentence<a name="test"></a>
 
 We introduce the test sentence to be preprocessed with NLP.
@@ -46,6 +49,9 @@ We introduce the test sentence to be preprocessed with NLP.
 text = "In H.P. Lovecraft's short story 'The Call of Cthulhu', the author states that in S. Latitude 47° 9', W. Longitude 126° 43' the great Cthulhu dreams in the sea-bottom city of R'lyeh."
 print(text)
 ```
+
+    In H.P. Lovecraft's short story 'The Call of Cthulhu', the author states that in S. Latitude 47° 9', W. Longitude 126° 43' the great Cthulhu dreams in the sea-bottom city of R'lyeh.
+    
 
 We follow the NLP pipeline:
 - conversion of text to lowercase;
@@ -65,6 +71,13 @@ We apply lowercase to the test sentence.
 text.lower()
 ```
 
+
+
+
+    "in h.p. lovecraft's short story 'the call of cthulhu', the author states that in s. latitude 47° 9', w. longitude 126° 43' the great cthulhu dreams in the sea-bottom city of r'lyeh."
+
+
+
 ## 3.2. Tokenizers<a name="tokenizers"></a>
 
 
@@ -76,6 +89,9 @@ white_tok = text.split()
 print(white_tok)
 ```
 
+    ['In', 'H.P.', "Lovecraft's", 'short', 'story', "'The", 'Call', 'of', "Cthulhu',", 'the', 'author', 'states', 'that', 'in', 'S.', 'Latitude', '47°', "9',", 'W.', 'Longitude', '126°', "43'", 'the', 'great', 'Cthulhu', 'dreams', 'in', 'the', 'sea-bottom', 'city', 'of', "R'lyeh."]
+    
+
 
 ```python
 # 2. Natural Language Tool Kit tokenizer
@@ -83,9 +99,20 @@ print(white_tok)
 import nltk
 from nltk.tokenize import word_tokenize
 
+
+nltk.download('punkt')
+
 tokens_NLTK = word_tokenize(text)
 print(tokens_NLTK)
 ```
+
+    [nltk_data] Downloading package punkt to
+    [nltk_data]     C:\Users\namara\AppData\Roaming\nltk_data...
+    [nltk_data]   Unzipping tokenizers\punkt.zip.
+    
+
+    ['In', 'H.P', '.', 'Lovecraft', "'s", 'short', 'story', "'The", 'Call', 'of', 'Cthulhu', "'", ',', 'the', 'author', 'states', 'that', 'in', 'S.', 'Latitude', '47°', '9', "'", ',', 'W.', 'Longitude', '126°', '43', "'", 'the', 'great', 'Cthulhu', 'dreams', 'in', 'the', 'sea-bottom', 'city', 'of', "R'lyeh", '.']
+    
 
 
 ```python
@@ -97,6 +124,52 @@ doc = nlp(text)
 for token in doc:
     print(token.text)
 ```
+
+    In
+    H.P.
+    Lovecraft
+    's
+    short
+    story
+    '
+    The
+    Call
+    of
+    Cthulhu
+    '
+    ,
+    the
+    author
+    states
+    that
+    in
+    S.
+    Latitude
+    47
+    °
+    9
+    '
+    ,
+    W.
+    Longitude
+    126
+    °
+    43
+    '
+    the
+    great
+    Cthulhu
+    dreams
+    in
+    the
+    sea
+    -
+    bottom
+    city
+    of
+    R'lyeh
+    .
+    
 
 
 ```python
@@ -110,6 +183,9 @@ textt = [text]
 X = vectorizer.fit_transform(textt)
 print(vectorizer.get_feature_names())
 ```
+
+    ['126', '43', '47', 'author', 'bottom', 'call', 'city', 'cthulhu', 'dreams', 'great', 'in', 'latitude', 'longitude', 'lovecraft', 'lyeh', 'of', 'sea', 'short', 'states', 'story', 'that', 'the']
+    
 
 ## 3.3. Stopwords removal<a name="stopwords"></a>
 
@@ -126,7 +202,9 @@ from nltk.tokenize import word_tokenize
 # we tokenize the test sentence
 tokens = word_tokenize(text)
 
+
 nltk.download('stopwords')
+
 stop = stopwords.words('english')
 
 filtered_tokens = [word for word in tokens if word not in stop]
@@ -137,11 +215,29 @@ print('-----------------------------')
 print('NLTK tokenized test sentence after stowords removal:', filtered_tokens)
 ```
 
+    -----------------------------
+    NLTK tokenized test sentence: ['In', 'H.P', '.', 'Lovecraft', "'s", 'short', 'story', "'The", 'Call', 'of', 'Cthulhu', "'", ',', 'the', 'author', 'states', 'that', 'in', 'S.', 'Latitude', '47°', '9', "'", ',', 'W.', 'Longitude', '126°', '43', "'", 'the', 'great', 'Cthulhu', 'dreams', 'in', 'the', 'sea-bottom', 'city', 'of', "R'lyeh", '.']
+    -----------------------------
+    NLTK tokenized test sentence after stowords removal: ['In', 'H.P', '.', 'Lovecraft', "'s", 'short', 'story', "'The", 'Call', 'Cthulhu', "'", ',', 'author', 'states', 'S.', 'Latitude', '47°', '9', "'", ',', 'W.', 'Longitude', '126°', '43', "'", 'great', 'Cthulhu', 'dreams', 'sea-bottom', 'city', "R'lyeh", '.']
+    
+
+    [nltk_data] Downloading package stopwords to
+    [nltk_data]     C:\Users\namara\AppData\Roaming\nltk_data...
+    [nltk_data]   Unzipping corpora\stopwords.zip.
+    
+
 
 ```python
 # removed stopwords
 list(set(tokens) - set(filtered_tokens))
 ```
+
+
+
+
+    ['that', 'in', 'the', 'of']
+
+
 
 
 ```python
@@ -173,11 +269,24 @@ print('-----------------------------')
 print('SpaCy tokenized test sentence after stowords removal:', filtered_sentence) 
 ```
 
+    -----------------------------
+    SpaCy tokenized test sentence: ['In', 'H.P.', 'Lovecraft', "'s", 'short', 'story', "'", 'The', 'Call', 'of', 'Cthulhu', "'", ',', 'the', 'author', 'states', 'that', 'in', 'S.', 'Latitude', '47', '°', '9', "'", ',', 'W.', 'Longitude', '126', '°', '43', "'", 'the', 'great', 'Cthulhu', 'dreams', 'in', 'the', 'sea', '-', 'bottom', 'city', 'of', "R'lyeh", '.']
+    -----------------------------
+    SpaCy tokenized test sentence after stowords removal: ['In', 'H.P.', 'Lovecraft', "'s", 'short', 'story', "'", 'The', 'Call', 'Cthulhu', "'", ',', 'author', 'states', 'S.', 'Latitude', '47', '°', '9', "'", ',', 'W.', 'Longitude', '126', '°', '43', "'", 'great', 'Cthulhu', 'dreams', 'sea', '-', 'city', "R'lyeh", '.']
+    
+
 
 ```python
 # removed stopwords
 list(set(token_list) - set(filtered_sentence))
 ```
+
+
+
+
+    ['bottom', 'that', 'the', 'in', 'of']
+
+
 
 
 ```python
@@ -198,11 +307,24 @@ print('-----------------------------')
 print('CountVectorizer() tokenized test sentence after stowords removal:', vectorizer_stop.get_feature_names()) 
 ```
 
+    -----------------------------
+    CountVectorizer() tokenized test sentence: ['126', '43', '47', 'author', 'bottom', 'call', 'city', 'cthulhu', 'dreams', 'great', 'in', 'latitude', 'longitude', 'lovecraft', 'lyeh', 'of', 'sea', 'short', 'states', 'story', 'that', 'the']
+    -----------------------------
+    CountVectorizer() tokenized test sentence after stowords removal: ['126', '43', '47', 'author', 'city', 'cthulhu', 'dreams', 'great', 'latitude', 'longitude', 'lovecraft', 'lyeh', 'sea', 'short', 'states', 'story']
+    
+
 
 ```python
 # removed stopwords
 set(vectorizer.get_feature_names()) - set(vectorizer_stop.get_feature_names())
 ```
+
+
+
+
+    {'bottom', 'call', 'in', 'of', 'that', 'the'}
+
+
 
 ## 3.4. Part-of-speech tagging<a name="POS"></a>
 
@@ -214,9 +336,19 @@ We perform Part-Of-Speech (POS) tagging using the NLTK.
 import nltk
 from nltk import pos_tag, word_tokenize
 
+nltk.download('averaged_perceptron_tagger')
+
 tokens_NLTK = word_tokenize(text)
 print(pos_tag(word_tokenize(text)))
 ```
+
+    [nltk_data] Downloading package averaged_perceptron_tagger to
+    [nltk_data]     C:\Users\namara\AppData\Roaming\nltk_data...
+    [nltk_data]   Unzipping taggers\averaged_perceptron_tagger.zip.
+    
+
+    [('In', 'IN'), ('H.P', 'NNP'), ('.', '.'), ('Lovecraft', 'NNP'), ("'s", 'POS'), ('short', 'JJ'), ('story', 'NN'), ("'The", 'POS'), ('Call', 'NNP'), ('of', 'IN'), ('Cthulhu', 'NNP'), ("'", 'POS'), (',', ','), ('the', 'DT'), ('author', 'NN'), ('states', 'VBZ'), ('that', 'IN'), ('in', 'IN'), ('S.', 'NNP'), ('Latitude', 'NNP'), ('47°', 'CD'), ('9', 'CD'), ("'", "''"), (',', ','), ('W.', 'NNP'), ('Longitude', 'NNP'), ('126°', 'CD'), ('43', 'CD'), ("'", "''"), ('the', 'DT'), ('great', 'JJ'), ('Cthulhu', 'NNP'), ('dreams', 'NN'), ('in', 'IN'), ('the', 'DT'), ('sea-bottom', 'JJ'), ('city', 'NN'), ('of', 'IN'), ("R'lyeh", 'NNP'), ('.', '.')]
+    
 
 ## 3.5. Stemming and lemmatization<a name="stemming"></a>
 
@@ -237,11 +369,16 @@ stem_tokens = tokenizer_porter(text)
 print(stem_tokens)
 ```
 
+    ['In', 'h.p', '.', 'lovecraft', "'s", 'short', 'stori', "'the", 'call', 'of', 'cthulhu', "'", ',', 'the', 'author', 'state', 'that', 'in', 'S.', 'latitud', '47°', '9', "'", ',', 'W.', 'longitud', '126°', '43', "'", 'the', 'great', 'cthulhu', 'dream', 'in', 'the', 'sea-bottom', 'citi', 'of', "r'lyeh", '.']
+    
+
 
 ```python
 # NLTK lemmatization (WordNet database) on tokenized test sentence
 ##################################################################
 from nltk.stem import WordNetLemmatizer 
+
+nltk.download('wordnet')
 
 # Wordnet lemmatizer
 lemmatizer = WordNetLemmatizer()
@@ -253,3 +390,11 @@ word_list = nltk.word_tokenize(text)
 lemmatized_output = '***'.join([lemmatizer.lemmatize(w, 'v') for w in word_list])
 print(lemmatized_output)
 ```
+
+    [nltk_data] Downloading package wordnet to
+    [nltk_data]     C:\Users\namara\AppData\Roaming\nltk_data...
+    [nltk_data]   Unzipping corpora\wordnet.zip.
+    
+
+    In***H.P***.***Lovecraft***'s***short***story***'The***Call***of***Cthulhu***'***,***the***author***state***that***in***S.***Latitude***47°***9***'***,***W.***Longitude***126°***43***'***the***great***Cthulhu***dream***in***the***sea-bottom***city***of***R'lyeh***.
+    

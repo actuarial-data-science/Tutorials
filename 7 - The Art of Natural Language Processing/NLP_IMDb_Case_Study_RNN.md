@@ -1,9 +1,8 @@
-
 # *The Art of Natural Language Processing: RNNs for the Case Study*
 
 ### **Authors: Andrea Ferrario, Mara Nägelin**
 
-**Date: February 2020**
+**Date: February 2020** (updated September 2020)
 
 Notebook to run the RNNs in the Contemporary Approach, as described in the tutorial `The Art of Natural Language Processing: Classical, Modern and Contemporary Approaches to Text Document Classification'.
 
@@ -46,6 +45,10 @@ display(HTML("<style>.container { width:100% !important; }</style>"))
 %matplotlib inline
 ```
 
+
+<style>.container { width:100% !important; }</style>
+
+
 <a id='datagen'></a>
 
 # 2. Import data
@@ -74,6 +77,10 @@ for s in ('test', 'train'):
             pbar.update()
 df.columns = ['review', 'sentiment']
 ```
+
+    0% [##############################] 100% | ETA: 00:00:00
+    Total time elapsed: 00:01:46
+    
 
 
 ```python
@@ -111,6 +118,13 @@ df = pd.read_csv(path, encoding='utf-8') # read in the dataframe stored as csv
 df.shape
 ```
 
+
+
+
+    (50000, 2)
+
+
+
 <a id='remdup'></a>
 
 ## 3.1. Remove duplicates
@@ -122,11 +136,32 @@ duplicates = df[df.duplicated()]  # Duplicated rows, except the first entry, are
 print(len(duplicates))
 ```
 
+    418
+    
+
 
 ```python
 # a check on the duplicated review
 duplicates.review   # some appear more than once, as they originally appear 3 or more times in the dataset
 ```
+
+
+
+
+    33       I was fortunate to attend the London premier o...
+    177      I've been strangely attracted to this film sin...
+    939      The Andrew Davies adaptation of the Sarah Wate...
+    1861     <br /><br />First of all, I reviewed this docu...
+    1870     Spheeris debut must be one of the best music d...
+                                   ...                        
+    49412    There is no way to avoid a comparison between ...
+    49484    **SPOILERS** I rented "Tesis" (or "Thesis" in ...
+    49842    'Dead Letter Office' is a low-budget film abou...
+    49853    This movie had a IMDB rating of 8.1 so I expec...
+    49864    You know all those letters to "Father Christma...
+    Name: review, Length: 418, dtype: object
+
+
 
 
 ```python
@@ -136,10 +171,49 @@ df.shape
 ```
 
 
+
+
+    (49582, 2)
+
+
+
+
 ```python
 # double check
 df[df.duplicated(subset='review')]
 ```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>review</th>
+      <th>sentiment</th>
+    </tr>
+  </thead>
+  <tbody>
+  </tbody>
+</table>
+</div>
+
+
 
 <a id='shuffle'></a>
 
@@ -181,11 +255,19 @@ for i,review in enumerate(df['review']):
     counts.update(text.split()) # splitting on whitespace
 ```
 
+    Counting words occurrences
+    0% [##############################] 100% | ETA: 00:00:00
+    Total time elapsed: 00:07:16
+    
+
 
 ```python
 # get the size of the vocabulary
 print('Number of unique words:', len(counts))
 ```
+
+    Number of unique words: 102966
+    
 
 
 ```python
@@ -195,6 +277,10 @@ print('Number of words that appear more than once:',
 print('Number of words that appear more than 30 times:', 
       len([k for k, v in counts.items() if v > 30]))
 ```
+
+    Number of words that appear more than once: 62923
+    Number of words that appear more than 30 times: 15282
+    
 
 
 ```python
@@ -221,12 +307,20 @@ for review in df['review']:
     pbar.update()
 ```
 
+    Map reviews to ints
+    0% [##############################] 100% | ETA: 00:00:00
+    Total time elapsed: 00:00:08
+    
+
 
 ```python
 # get the median length of the mapped review sequences to inform the choice of sequence_length
 print('Median length of mapped reviews:',
       np.median([len(review) for review in mapped_reviews]))
 ```
+
+    Median length of mapped reviews: 213.0
+    
 
 
 ```python
@@ -235,6 +329,12 @@ rev_lengths = np.array([len(review) for review in mapped_reviews])
 plt.hist(rev_lengths[rev_lengths < 500])
 plt.show()
 ```
+
+
+    
+![png](output_36_0.png)
+    
+
 
 
 ```python
@@ -255,6 +355,178 @@ for i, row in enumerate(mapped_reviews):
 df_processed = pd.concat([df['sentiment'],pd.DataFrame(sequences)], axis=1)
 df_processed.head()
 ```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>sentiment</th>
+      <th>0</th>
+      <th>1</th>
+      <th>2</th>
+      <th>3</th>
+      <th>4</th>
+      <th>5</th>
+      <th>6</th>
+      <th>7</th>
+      <th>8</th>
+      <th>...</th>
+      <th>190</th>
+      <th>191</th>
+      <th>192</th>
+      <th>193</th>
+      <th>194</th>
+      <th>195</th>
+      <th>196</th>
+      <th>197</th>
+      <th>198</th>
+      <th>199</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>0</td>
+      <td>1</td>
+      <td>4</td>
+      <td>961</td>
+      <td>306</td>
+      <td>581</td>
+      <td>82</td>
+      <td>97</td>
+      <td>1</td>
+      <td>76</td>
+      <td>2</td>
+      <td>...</td>
+      <td>11</td>
+      <td>1945</td>
+      <td>1209</td>
+      <td>2</td>
+      <td>1881</td>
+      <td>3</td>
+      <td>2612</td>
+      <td>3</td>
+      <td>5244</td>
+      <td>2218</td>
+    </tr>
+    <tr>
+      <td>1</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>...</td>
+      <td>14</td>
+      <td>8</td>
+      <td>21</td>
+      <td>147</td>
+      <td>1074</td>
+      <td>25</td>
+      <td>463</td>
+      <td>6240</td>
+      <td>41</td>
+      <td>41</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>1</td>
+      <td>3</td>
+      <td>359</td>
+      <td>1</td>
+      <td>109</td>
+      <td>3</td>
+      <td>44</td>
+      <td>2053</td>
+      <td>9122</td>
+      <td>6</td>
+      <td>...</td>
+      <td>3996</td>
+      <td>678</td>
+      <td>105</td>
+      <td>1908</td>
+      <td>2667</td>
+      <td>2</td>
+      <td>5</td>
+      <td>360</td>
+      <td>24</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>...</td>
+      <td>1</td>
+      <td>2728</td>
+      <td>16</td>
+      <td>4074</td>
+      <td>40</td>
+      <td>493</td>
+      <td>7</td>
+      <td>89</td>
+      <td>14</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>0</td>
+      <td>19</td>
+      <td>1440</td>
+      <td>19</td>
+      <td>723</td>
+      <td>19</td>
+      <td>1855</td>
+      <td>19</td>
+      <td>1440</td>
+      <td>19</td>
+      <td>...</td>
+      <td>1201</td>
+      <td>19</td>
+      <td>2294</td>
+      <td>6281</td>
+      <td>10</td>
+      <td>64</td>
+      <td>6112</td>
+      <td>771</td>
+      <td>100</td>
+      <td>2</td>
+    </tr>
+  </tbody>
+</table>
+<p>5 rows × 201 columns</p>
+</div>
+
+
 
 <a id='prep_keras'></a>
 
@@ -283,6 +555,178 @@ sequences = pad_sequences(list_tokenized, maxlen=sequence_length)
 df_processed = pd.concat([df['sentiment'], pd.DataFrame(sequences)], axis=1)
 df_processed.head()
 ```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>sentiment</th>
+      <th>0</th>
+      <th>1</th>
+      <th>2</th>
+      <th>3</th>
+      <th>4</th>
+      <th>5</th>
+      <th>6</th>
+      <th>7</th>
+      <th>8</th>
+      <th>...</th>
+      <th>190</th>
+      <th>191</th>
+      <th>192</th>
+      <th>193</th>
+      <th>194</th>
+      <th>195</th>
+      <th>196</th>
+      <th>197</th>
+      <th>198</th>
+      <th>199</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>0</td>
+      <td>1</td>
+      <td>1786</td>
+      <td>1003</td>
+      <td>1427</td>
+      <td>3</td>
+      <td>832</td>
+      <td>7</td>
+      <td>20</td>
+      <td>48</td>
+      <td>3</td>
+      <td>...</td>
+      <td>20</td>
+      <td>1132</td>
+      <td>8</td>
+      <td>8</td>
+      <td>1923</td>
+      <td>1192</td>
+      <td>1859</td>
+      <td>2590</td>
+      <td>5216</td>
+      <td>2194</td>
+    </tr>
+    <tr>
+      <td>1</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>...</td>
+      <td>23</td>
+      <td>263</td>
+      <td>9</td>
+      <td>6</td>
+      <td>14</td>
+      <td>133</td>
+      <td>1057</td>
+      <td>18</td>
+      <td>448</td>
+      <td>6213</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>1</td>
+      <td>6</td>
+      <td>6</td>
+      <td>10587</td>
+      <td>27</td>
+      <td>3</td>
+      <td>1133</td>
+      <td>1637</td>
+      <td>374</td>
+      <td>26</td>
+      <td>...</td>
+      <td>12</td>
+      <td>997</td>
+      <td>3971</td>
+      <td>663</td>
+      <td>93</td>
+      <td>1886</td>
+      <td>2643</td>
+      <td>3</td>
+      <td>345</td>
+      <td>17</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>...</td>
+      <td>10</td>
+      <td>1</td>
+      <td>2706</td>
+      <td>11</td>
+      <td>4049</td>
+      <td>31</td>
+      <td>478</td>
+      <td>5</td>
+      <td>77</td>
+      <td>9</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>0</td>
+      <td>10588</td>
+      <td>3559</td>
+      <td>461</td>
+      <td>4106</td>
+      <td>14422</td>
+      <td>116</td>
+      <td>2</td>
+      <td>3836</td>
+      <td>560</td>
+      <td>...</td>
+      <td>117</td>
+      <td>13</td>
+      <td>1183</td>
+      <td>2271</td>
+      <td>6295</td>
+      <td>7</td>
+      <td>53</td>
+      <td>6085</td>
+      <td>755</td>
+      <td>88</td>
+    </tr>
+  </tbody>
+</table>
+<p>5 rows × 201 columns</p>
+</div>
+
+
 
 <br>  
 <br>
@@ -321,6 +765,13 @@ df_processed = pd.read_csv(path, encoding='utf-8')
 df_processed.shape
 ```
 
+
+
+
+    (49582, 201)
+
+
+
 <a id='trainsplit'></a>
 
 ## 4.1. Train test split
@@ -336,6 +787,9 @@ print(str(int(perc_train*100))+'/'+str(int(100-perc_train*100))+' train test spl
       n_train, '/', n_test)
 ```
 
+    80/20 train test split: 39666 / 9916
+    
+
 
 ```python
 # create the training and testing datasets
@@ -348,6 +802,10 @@ y_test = df_processed.tail(n_test).sentiment.values
 print('Training data shape check X, y:', X_train.shape, y_train.shape)
 print('Testing data shape check X, y:', X_test.shape, y_test.shape)
 ```
+
+    Training data shape check X, y: (39666, 200) (39666,)
+    Testing data shape check X, y: (9916, 200) (9916,)
+    
 
 <a id='modeldef'></a>
 
@@ -364,6 +822,9 @@ from tensorflow.keras import layers
 vocab_size = df_processed.drop('sentiment', axis=1).values.max() + 1
 print('Vocabulary size:', vocab_size-1)
 ```
+
+    Vocabulary size: 14999
+    
 
 Each of the following subsections defines a distinct model architecture. The user can select and run one of them.
 
@@ -456,6 +917,27 @@ model.add(layers.Dense(1, activation='sigmoid'))
 print(model.summary())
 ```
 
+    Model: "sequential_2"
+    _________________________________________________________________
+    Layer (type)                 Output Shape              Param #   
+    =================================================================
+    embedding_2 (Embedding)      (None, None, 256)         3840000   
+    _________________________________________________________________
+    lstm_1 (LSTM)                (None, None, 128)         197120    
+    _________________________________________________________________
+    lstm_2 (LSTM)                (None, 128)               131584    
+    _________________________________________________________________
+    dropout_2 (Dropout)          (None, 128)               0         
+    _________________________________________________________________
+    dense_2 (Dense)              (None, 1)                 129       
+    =================================================================
+    Total params: 4,168,833
+    Trainable params: 4,168,833
+    Non-trainable params: 0
+    _________________________________________________________________
+    None
+    
+
 
 ```python
 # compile the model
@@ -476,6 +958,9 @@ callbacks = [tf.keras.callbacks.EarlyStopping(
     verbose=1,
     restore_best_weights=True)]
 ```
+
+**WARNING**: as mentioned in the tutorial, the following training routine is computationally intensive. We recommend to sub-sample data in [Section 4.1.](#trainsplit) and/or use HPC infrastructure. 
+Note that we ran all the machine learning routines presented in this section on the ETH High Performance Computing (HPC) infrastructure [Euler](https://scicomp.ethz.ch/wiki/Euler), by submitting all jobs to a virtual machine consisting of 32 cores with 3072 MB RAM per core (total RAM: 98.304 GB). Therefore, notebook outputs are not available for the subesquent cells.
 
 
 ```python
@@ -546,8 +1031,3 @@ The above example RNNs are simple architectures where none of the parameters wer
     (either as nontrainable fixed weights or with transfer learning, compare the Notebook ```NLP_IMDb_Case_Study_ML.ipynb``` and Section 3 of the tutorial)  
 
 Finally, note that the size of the dataset is arguably still too small to allow for much improvement over the presented architectures and results.
-
-
-```python
-
-```
