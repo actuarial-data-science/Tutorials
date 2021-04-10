@@ -1,6 +1,6 @@
 # 8 - Peeking into the Black Box: An Actuarial Case Study for Interpretable Machine Learning
 
-Here, you find the R-code and the R Markdown files for the article ["Peeking into the Black Box: An Actuarial Case Study for Interpretable Machine Learning"](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3595944) from C. Lorentzen and M. Mayer.
+Here, you find the R code and the R Markdown files for the article ["Peeking into the Black Box: An Actuarial Case Study for Interpretable Machine Learning"](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3595944) from C. Lorentzen and M. Mayer.
 
 ### R Code
 - p01_prep.R
