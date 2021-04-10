@@ -1,0 +1,680 @@
+---
+title: "Peeking into the Black Box"
+author: "Christian Lorentzen & Michael Mayer"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+    df_print: paged
+    theme: united
+    highlight: zenburn
+subtitle: An Actuarial Case Study for Interpretable Machine Learning
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, 
+  warning = FALSE,
+  message = FALSE, 
+  fig.height = 5,
+  fig.width = 6
+)
+```
+
+# Introduction
+
+This notebook serves as accompanion to the tutorial ["Peeking into the Black Box"](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3595944) on [SSRN](https://www.ssrn.com/index.cfm/en/).
+
+The code is similar to the one used in above tutorial and combines the raw R code in the scripts available on [github](https://github.com/JSchelldorfer/ActuarialDataScience/tree/master/8%20-%20Peeking%20into%20the%20Black%20Box) along with some more comments. Please refer to the tutorial for explanations.
+
+Note that the results might vary depending on the R and Python package versions, see last section for the result of `sessionInfo()` and corresponding info on the Python setup.
+
+# Data Preparation
+
+The tutorial uses the French MTPL data set available on [openML (ID 41214)](https://www.openml.org/d/41214).
+
+## Load packages and data
+
+```{r}
+library(tidyverse)
+library(reshape2)
+library(corrplot)
+library(splines)   
+library(splitTools)
+library(xgboost)   
+library(keras)
+library(MetricsWeighted)
+library(flashlight)
+
+# Fetch data
+library(OpenML)
+library(farff)
+
+freMTPL2freq <- getOMLDataSet(data.id = 41214)$data
+```
+
+## Inspect the raw dataset
+
+```{r}
+str(freMTPL2freq)
+head(freMTPL2freq, 9)
+```
+
+## Data preprocessing
+
+Data preprocessing includes a couple of transformations as well as adding a `group_id` identifying rows possibly referring to the same policy. Respecting `group_id` in data splitting techniques (train/test, cross-validation) is essential for honest data validation. Ignoring it is one of the most frequent mistakes in machine learning.
+
+```{r}
+# Grouping id
+distinct <- freMTPL2freq %>% 
+  distinct_at(vars(-c(IDpol, Exposure, ClaimNb))) %>% 
+  mutate(group_id = row_number())
+
+# Preprocessing
+dat <- freMTPL2freq %>% 
+  left_join(distinct) %>% 
+  mutate(Exposure = pmin(1, Exposure),
+         Freq = pmin(15, ClaimNb / Exposure),
+         VehPower = pmin(12, VehPower),
+         VehAge = pmin(20, VehAge),
+         VehGas = factor(VehGas),
+         DrivAge = pmin(85, DrivAge),
+         logDensity = log(Density),
+         VehBrand = factor(VehBrand, levels = 
+                             paste0("B", c(12, 1:6, 10, 11, 13, 14))),
+         PolicyRegion = relevel(Region, "R24"),
+         AreaCode = Area)
+
+# Group sizes of suspected clusters
+table(table(dat[, "group_id"]))
+
+# The worst group (22 times the same)
+dat[dat$group_id == 283967, ] 
+
+# Number of observations
+nrow(dat)
+```
+
+## Covariables, Response, Weight
+
+We will define covariables, response and exposure weight variables for later use.
+
+```{r}
+x <- c("VehPower", "VehAge",  "VehBrand", "VehGas", "DrivAge",
+       "logDensity", "PolicyRegion")
+y <- "Freq"
+w <- "Exposure"
+```
+
+# Descriptive Analysis
+
+In order to get used to the dataset, we start with a descriptive analysis.
+
+## Inspect the prepared dataset
+
+```{r}
+head(dat[, c(x, w, y)])
+summary(dat[, c(x, w, y)])
+```
+
+## Univariate description
+
+How are variables distributed univariately?
+
+```{r}
+melted <- dat[c("Freq", "Exposure", "DrivAge", 
+                "VehAge", "VehPower", "logDensity")] %>% 
+  stack() %>% 
+  filter(ind != "Freq" | values > 0) %>% 
+  mutate(ind = fct_recode(
+    ind, 
+    `Driver's age` = "DrivAge", 
+    `Vehicle's age` = "VehAge", 
+    `Vehicle power` = "VehPower", 
+    `Logarithmic density` = "logDensity")
+  )
+
+ggplot(melted, aes(x=values)) +
+  geom_histogram(bins = 19, fill = "#E69F00") +
+  facet_wrap(~ind, scales = "free") +
+  labs(x = element_blank(), y = element_blank()) +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+```
+
+## Bivariate description
+
+Here, we consider some interesting (but not all) bivariate associations across covariables.
+
+```{r}
+# Correlations across numeric covariables
+cor_mat <- dat %>% 
+  select_at(c(x, "BonusMalus")) %>% 
+  select_if(is.numeric) %>% 
+  cor() %>% 
+  round(2)
+corrplot(cor_mat, method = "square", type = "lower", diag = FALSE, title = "",
+         addCoef.col = "black", tl.col = "black")
+
+# Boxplots
+th <- theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+
+# BonusMalus nach DrivAge
+dat %>% 
+  mutate(DrivAge = cut(DrivAge, c(17:24, seq(25, 85, 10)), 
+                       labels = c(18:25, "26-35", "36-45", "46-55", "56-65", "66-75", "76+"),
+                       include.lowest = TRUE),
+         DrivAge = fct_recode(DrivAge)) %>% 
+ggplot(aes(x = DrivAge, y = BonusMalus)) +
+  geom_boxplot(outlier.shape = NA, fill = "#E69F00") +
+  coord_cartesian(ylim = c(50, 125))
+
+# Brand/vehicle age
+dat %>% 
+  ggplot(aes(x = VehBrand, y = VehAge)) +
+  geom_boxplot(outlier.shape = NA, fill = "#E69F00") +
+  th
+
+# Density/Area
+dat %>% 
+  ggplot(aes(x = AreaCode, y = logDensity)) +
+  geom_boxplot(fill = "#E69F00") +
+  th
+
+# Density/Region
+dat %>% 
+  ggplot(aes(x = Region, y = logDensity)) +
+  geom_boxplot(outlier.shape = NA, fill = "#E69F00") +
+  th
+```
+
+# Modeling
+
+With the prepared dataset in hand, we are ready for the modeling part. 
+
+## Grouped split
+
+First, we split the dataset into train and test, keeping together rows with identical `group_id`.
+
+```{r}
+ind <- partition(dat[["group_id"]], p = c(train = 0.8, test = 0.2), 
+                 seed = 22, type = "grouped")
+train <- dat[ind$train, ]
+test <- dat[ind$test, ]
+```
+
+## GLM
+
+Our first model is a generalized linear model without interactions but with a regression spline on two important covariables.
+
+```{r}
+fit_glm <- glm(
+  Freq ~ VehPower + ns(VehAge, 5) + VehBrand +
+    VehGas + ns(DrivAge, 5) + logDensity + PolicyRegion,
+  data = train,
+  family = quasipoisson(),
+  weights = train[[w]]
+)
+
+summary(fit_glm)
+```
+
+## Tree booster
+
+The next model is a tree booster fitted by XGBoost. Its parameters have been tuned by grouped five-fold cross-validation (not shown here).
+
+```{r}
+# Input maker
+prep_xgb <- function(dat, x) {
+  data.matrix(dat[, x, drop = FALSE])
+}
+
+# Data interface to XGBoost
+dtrain <- xgb.DMatrix(
+  prep_xgb(train, x), 
+  label = train[[y]], 
+  weight = train[[w]]
+)
+
+# Parameters chosen by 5-fold grouped CV
+params_freq <- list(
+  learning_rate = 0.2,
+  max_depth = 5,
+  alpha = 3,
+  lambda = 0.5,
+  max_delta_step = 2,
+  min_split_loss = 0,
+  #  monotone_constraints = c(0,-1,0,0,0,0,0), 
+  #  interaction_constraints = list(4, c(0, 1, 2, 3, 5, 6)),
+  colsample_bytree = 1,
+  subsample = 0.9
+)
+
+# Fit
+set.seed(1)
+fit_xgb <- xgb.train(
+  params_freq, 
+  data = dtrain,
+  nrounds = 580,
+  objective = "count:poisson",
+  watchlist = list(train = dtrain),
+  print_every_n = 100
+)
+
+# Save and load model
+# xgb.save(fit_xgb, "xgb.model") 
+# fit_xgb <- xgb.load("xgb.model")
+```
+
+## Deep neural net
+
+Our last model is a deep neural net fitted by Keras/TensorFlow using Python as backend. Categorical covariables are fed through one-dimensional embeddings. In order to produce unbiased predictions on the frequency scale, we wrap the neural net in a Poisson GLM, having as single predictor the neural net with peeled-off head.
+
+Note that this model is not fully reproducible.
+
+```{r}
+# Input list maker
+prep_nn <- function(dat, x, cat_cols = c("PolicyRegion", "VehBrand")) {
+  dense_cols <- setdiff(x, cat_cols)
+  c(list(dense1 = data.matrix(dat[, dense_cols])), 
+    lapply(dat[, cat_cols], function(z) as.integer(z) - 1))
+}
+
+# Initialize neural net
+new_neural_net <- function() {
+  k_clear_session()
+  set.seed(1)
+  if ("set_seed" %in% names(tensorflow::tf$random)) {
+    tensorflow::tf$random$set_seed(0)
+  } else if ("set_random_seed" %in% names(tensorflow::tf$random)) {
+    tensorflow::tf$random$set_random_seed(0)
+  } else {
+    print("Check tf version")
+  }
+  
+  # Model architecture
+  dense_input <- layer_input(5, name = "dense1", dtype = "float32")
+  PolicyRegion_input <- layer_input(1, name = "PolicyRegion", dtype = "int8")
+  VehBrand_input <- layer_input(1, name = "VehBrand", dtype = "int8")
+
+  PolicyRegion_emb <- PolicyRegion_input %>% 
+    layer_embedding(22, 1) %>% 
+    layer_flatten()
+  
+  VehBrand_emb <- VehBrand_input %>% 
+    layer_embedding(11, 1) %>% 
+    layer_flatten()
+
+  outputs <- list(dense_input, PolicyRegion_emb, VehBrand_emb) %>% 
+    layer_concatenate() %>% 
+    layer_dense(20, activation = "tanh") %>%
+    layer_dense(15, activation = "tanh") %>%
+    layer_dense(10, activation = "tanh") %>% 
+    layer_dense(1, activation = "exponential")
+  
+  inputs <- list(dense1 = dense_input, 
+                 PolicyRegion = PolicyRegion_input, 
+                 VehBrand = VehBrand_input)
+  
+  model <- keras_model(inputs, outputs)
+  
+  model %>% 
+    compile(loss = loss_poisson,
+            optimizer = optimizer_nadam(),
+            weighted_metrics = "poisson")
+  
+  return(model)
+}
+
+neural_net <- new_neural_net()
+
+neural_net %>% 
+  summary()
+
+history <- neural_net %>% 
+  fit(x = prep_nn(train, x), 
+      y = train[, y], 
+      sample_weight = train[, w],
+      batch_size = 1e4, 
+      epochs = 300,
+      verbose = 2)  
+    
+plot(history)
+
+# Calibrate by using last hidden layer activations as GLM input encoder
+encoder <- keras_model(
+  inputs = neural_net$input, 
+  outputs = get_layer(neural_net, "dense_2")$output
+)
+
+# Creates input for calibration GLM (extends prep_nn)
+prep_nn_calib <- function(dat, x, 
+                          cat_cols = c("PolicyRegion", "VehBrand"), 
+                          enc = encoder) {
+  prep_nn(dat, x, cat_cols) %>% 
+    predict(enc, ., batch_size = 1e4) %>% 
+    data.frame()
+}
+
+# Calibration GLM
+fit_nn <- glm(
+  Freq ~ .,
+  data = cbind(train["Freq"], prep_nn_calib(train, x)), 
+  family = quasipoisson(), 
+  weights = train[[w]]
+)
+```
+
+# Model Explanations
+
+The models are ready, so let's shed light into them.
+
+## Setting up explainers
+
+We start by setting up the explainers. These are basically objects that know how to create predictions. 
+
+**Crucial: the prediction function needs to work for subsets of datasets, not just for the original model data set.**
+
+```{r}
+fl_glm <- flashlight(
+  model = fit_glm, label = "GLM", 
+  predict_function = function(fit, X) predict(fit, X, type = "response")
+)
+
+fl_nn <- flashlight(
+  model = fit_nn, label = "NNet", 
+  predict_function = function(fit, X) 
+    predict(fit, prep_nn_calib(X, x), type = "response")
+)
+
+fl_xgb <- flashlight(
+  model = fit_xgb, label = "XGBoost", 
+  predict_function = function(fit, X) predict(fit, prep_xgb(X, x))
+)
+
+# Combine them and add common elements like reference data
+metrics <- list(`Average deviance` = deviance_poisson, 
+                `Relative deviance reduction` = r_squared_poisson)
+fls <- multiflashlight(list(fl_glm, fl_nn, fl_xgb), data = test, 
+                       y = y, w = w, metrics = metrics)
+
+# Version on canonical scale
+fls_log <- multiflashlight(fls, linkinv = log)
+```
+
+## Performance
+
+We start to interpret the models by looking at model performance using deviance related metrics.
+
+```{r}
+fillc <- "#E69F00"
+
+perf <- light_performance(fls)
+perf
+plot(perf, geom = "point") +
+  labs(x = element_blank(), y = element_blank())
+```
+
+## Importance
+
+Next, we consider permutation variable importance. By default `flashlight` uses the first performance metric specified above.
+
+```{r}
+imp <- light_importance(fls, v = x)
+plot(imp, fill = fillc, color = "black")
+```
+
+## Effects
+
+Having identified the most important predictors, we would like to see how they act on the response. We consider different ways to investigate this.
+
+### ICE
+
+Building block of partial dependence plots are individual conditional expectations. These show how predictions for single observations change when sliding the values of one covariable, keeping the rest fixed.
+
+We show uncentered and centered ICE both on frequency and log-frequency scale.
+
+```{r}
+# Frequency scale (uncentered)
+plot(light_ice(fls, v = "DrivAge", n_max = 200, seed = 3), alpha = 0.1)
+
+# Frequency scale (centered)
+plot(light_ice(fls, v = "DrivAge", n_max = 200, seed = 3, 
+               center = "middle"), alpha = 0.03)
+
+# log-frequency scale (uncentered)
+plot(light_ice(fls_log, v = "DrivAge", n_max = 200, seed = 3), alpha = 0.1)
+
+# log-frequency scale (centered)
+plot(light_ice(fls_log, v = "DrivAge", n_max = 200, seed = 3, 
+               center = "middle"), alpha = 0.03)
+```
+
+### Partial dependence curves
+
+Taking the average of many ICE curves produces the famous partial dependence plot. We consider such plots for four predictors.
+
+```{r}
+plot(light_profile(fls, v = "VehAge", pd_evaluate_at = 0:20))
+plot(light_profile(fls, v = "DrivAge", n_bins = 25))
+plot(light_profile(fls, v = "logDensity"))
+plot(light_profile(fls, v = "VehGas"))
+```
+
+### ALE versus partial dependence
+
+An alternative to the good old partial dependence plots are ALE (accumulated local expectation) plots. They remove the "Ceteris Paribus" assumption of partial dependence plots.
+
+```{r}
+ale_DrivAge <- light_effects(fls, v = "DrivAge", counts_weighted = TRUE,
+                             v_labels = FALSE, n_bins = 20, cut_type = "quantile")
+plot(ale_DrivAge, use = c("pd", "ale"), show_points = FALSE)
+```
+
+### Classic diagnostic plots
+
+Classic predicted/residual/response versus covariable plots are worth a look.
+
+```{r}
+# Average predicted versus covariable
+plot(light_profile(fls, v = "VehAge", type = "predicted"))
+
+# Average residual versus covariable
+plot(light_profile(fls, v = "VehAge", type = "residual")) +
+  geom_hline(yintercept = 0)
+
+# Average response versus covariable
+plot(light_profile(fls, v = "VehAge", type = "response"))
+```
+
+### Multiple aspects combined
+
+We often get a good picture of the effect of a covariable by combining partial dependence with classic plots.
+
+```{r}
+eff_DrivAge <- light_effects(fls, v = "DrivAge", counts_weighted = TRUE)
+p <- plot(eff_DrivAge, show_points = FALSE)
+plot_counts(p, eff_DrivAge, alpha = 0.3)
+```
+
+## Interactions
+
+After having studied the effects of single covariables, we now move to the next step: identifying strong interactions. This can be done by looking at Friedman's H statistic.
+
+### Relative to importance of involved covariables
+
+```{r}
+interact_rel <- light_interaction(
+  fls_log, 
+  v = most_important(imp, 4), 
+  take_sqrt = FALSE,
+  pairwise = TRUE, 
+  use_linkinv = TRUE,
+  seed = 61
+)
+plot(interact_rel, color = "black", fill = fillc, rotate_x = TRUE)
+```
+
+### On absolute scale
+
+```{r}
+interact_abs <- light_interaction(
+  fls_log, 
+  v = most_important(imp, 4), 
+  normalize = FALSE,
+  pairwise = TRUE, 
+  use_linkinv = TRUE,
+  seed = 61
+)
+plot(interact_abs, color = "black", fill = fillc, rotate_x = TRUE)
+```
+
+### Visualization
+
+Let's illustrate a strong and a weak interaction by conditional partial dependence plots.
+
+```{r}
+# Filter on largest three brands
+sub_data <- test %>% 
+  filter(VehBrand %in% c("B1", "B2", "B12"))
+
+# Strong interaction
+pdp_vehAge_Brand <- light_profile(fls_log, v = "VehAge", by = "VehBrand", 
+                                  pd_seed = 50, data = sub_data)
+plot(pdp_vehAge_Brand)
+
+# Weak interaction
+pdp_DrivAge_Gas <- light_profile(fls_log, v = "DrivAge", 
+                                 by = "VehGas", pd_seed = 50)
+plot(pdp_DrivAge_Gas)
+```
+
+## Global surrogate tree
+
+A nice way to interpret a blackbox model is to explain its predictions by a glassbox model like a single decision tree.
+
+```{r}
+# Neural net
+surr_nn <- light_global_surrogate(fls_log$NNet, v = x)
+plot(surr_nn)
+
+# Boosted trees
+surr_xgb <- light_global_surrogate(fls_log$XGBoost, v = x)
+plot(surr_xgb)
+```
+
+## Individual predictions
+
+So far, we have considered global model explanations. What about local properties, i.e. explaining single predictions?
+
+### Breakdown
+
+One algorithm is called "breakdown". It decomposes a single prediction into additive contributions from covariables. The first plot shows the standard breakdown decomposition, where variables are visited in the order of importance. The second plot is based on an average of multiple random visit orders. The latter might serve as model agnostic approximation to SHAP.
+
+```{r}
+# The observation/prediction to explain
+new_obs <- test[1, ]
+new_obs[, x]
+unlist(predict(fls, data = new_obs))
+
+# Breakdown
+bd <- light_breakdown(fls$XGBoost, new_obs = new_obs, 
+                      v = x, n_max = 1000, seed = 20)
+plot(bd)
+
+# Extract same order of variables for visualization only
+v <- setdiff(bd$data$variable, c("baseline", "prediction"))
+
+# Approximate SHAP
+shap <- light_breakdown(fls$XGBoost, new_obs, 
+                        visit_strategy = "permutation",
+                        v = v, n_max = 1000, seed = 20)
+plot(shap)
+```
+
+## Derive global model properties from local
+
+Above decompositions explain single predictions, not the model as a whole. By decomposing many predictions, we can even make global model statements just by a descriptive analysis of many single contibutions. Note there are better ways to calculate SHAP values than by repeated calls of breakdown.
+
+Attention: This takes a looooong time to calculate (15 minutes on my computer). That is why we save the resulting explainer and reload it in subsequent runs.
+
+We derive SHAP importance and SHAP dependence plots. SHAP importance show average absolute contributions per covariable, while SHAP dependence plots are scatter plots of contributions against covariable values.
+
+```{r}
+if (!file.exists("fl_with_shap.rds")) {
+  fl_with_shap <- add_shap(
+    fls$XGBoost, 
+    v = x, 
+    n_shap = 500, 
+    verbose = FALSE,
+    n_perm = 12, 
+    n_max = 1000, 
+    seed = 100
+  )
+  saveRDS(fl_with_shap, file = "fl_with_shap.rds")
+} else {
+  fl_with_shap <- readRDS("fl_with_shap.rds")
+}
+
+# SHAP importance
+plot(light_importance(fl_with_shap, v = x, type = "shap"),
+     fill = fillc, color = "black")
+
+# SHAP dependence plot
+plot(light_scatter(fl_with_shap, v = "DrivAge", type = "shap"), alpha = 0.3)
+```
+
+## Improve GLM
+
+Based on the above insights, we try to improve our GLM by adding regression splines for `logDensity` and some important interaction effects between `VehBrand` and `VehAge` that we have identified.
+
+```{r}
+fit_glm2 <- glm(
+  Freq ~ VehPower + VehBrand * VehGas + PolicyRegion + 
+    ns(DrivAge, 5) + VehBrand * ns(VehAge, 5) + ns(logDensity, 5), 
+  data = train, 
+  family = quasipoisson(), 
+  weights = train[[w]]
+)
+
+# Setting up expainers
+fl_glm2 <- flashlight(
+  model = fit_glm2, label = "Improved GLM", 
+  predict_function = function(fit, X) predict(fit, X, type = "response")
+)
+
+# Combine them and add common elements like reference data
+fls2 <- multiflashlight(list(fl_glm, fl_glm2, fl_nn, fl_xgb), 
+                        metrics = metrics, data = test, y = y, w = w)
+fls2_log <- multiflashlight(fls2, linkinv = log)
+
+# Some results
+
+# Performance
+plot(light_performance(fls2), geom = "point", rotate_x = TRUE)
+
+# Importance
+plot(light_importance(fls2, v = x), fill = fillc, color = "black", top_m = 4)
+
+# Partial dependence
+plot(light_profile(fls2, v = "logDensity"))
+
+# Interaction strenght
+interact_rel_improved <- light_interaction(
+  fls2_log, v = most_important(imp, 4), take_sqrt = FALSE,
+  pairwise = TRUE,  use_linkinv = TRUE, seed = 61)
+plot(interact_rel_improved, color = "black", fill = fillc, top_m = 4)
+```
+
+# Session Info
+
+The html is generated with the follow packages (slightly newer than the ones used in the published tutorial).
+
+```{r}
+sessionInfo()
+reticulate::py_config()
+tensorflow::tf_version()
+```
