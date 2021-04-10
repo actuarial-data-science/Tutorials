@@ -8,3 +8,7 @@ Here you find the code to the article "Peeking into the Black Box: An Actuarial 
 - p02_descriptive.R
 - p03_modeling.R
 - p04_explain.R
+
+### R Markdown
+- peeking_into_the_blackbox.Rmd
+- peeking_into_the_blackbox.html
