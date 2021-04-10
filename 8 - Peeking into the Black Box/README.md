@@ -10,4 +10,4 @@ Here, you find the R code and the R Markdown files for the article ["Peeking int
 
 ### R Markdown
 - peeking_into_the_blackbox.Rmd
-- [peeking_into_the_blackbox.html](https://htmlpreview.github.io/?https://github.com/JSchelldorfer/ActuarialDataScience/blob/master/8%20-%20Peeking%20into%20the%20Black%20Box/peeking_into_the_blackbox.html)
+- [peeking_into_the_blackbox.html](https://htmlpreview.github.io/?https://github.com/JSchelldorfer/ActuarialDataScience/blob/master/8%20-%20Peeking%20into%20the%20Black%20Box/peeking_into_the_blackbox.html) (to see the html file in the browser)
