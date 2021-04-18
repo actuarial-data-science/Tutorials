@@ -6,6 +6,7 @@ output:
   html_document:
     toc: yes
     toc_float: yes
+    toc_depth: 2
     number_sections: yes
     df_print: paged
     theme: united

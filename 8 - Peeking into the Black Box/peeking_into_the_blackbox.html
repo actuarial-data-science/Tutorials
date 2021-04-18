@@ -11,7 +11,7 @@
 
 <meta name="author" content="Christian Lorentzen &amp; Michael Mayer" />
 
-<meta name="date" content="2021-03-21" />
+<meta name="date" content="2021-04-12" />
 
 <title>Peeking into the Black Box</title>
 
@@ -328,7 +328,7 @@ div.tocify {
 <h1 class="title toc-ignore">Peeking into the Black Box</h1>
 <h3 class="subtitle">An Actuarial Case Study for Interpretable Machine Learning</h3>
 <h4 class="author">Christian Lorentzen &amp; Michael Mayer</h4>
-<h4 class="date">2021-03-21</h4>
+<h4 class="date">2021-04-12</h4>
 
 </div>
 
@@ -669,7 +669,7 @@ div.tocify {
 <span id="cb23-34"><a href="#cb23-34" aria-hidden="true" tabindex="-1"></a>  <span class="at">watchlist =</span> <span class="fu">list</span>(<span class="at">train =</span> dtrain),</span>
 <span id="cb23-35"><a href="#cb23-35" aria-hidden="true" tabindex="-1"></a>  <span class="at">print_every_n =</span> <span class="dv">100</span></span>
 <span id="cb23-36"><a href="#cb23-36" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div>
-<pre><code>## [1]  train-poisson-nloglik:0.598904 
+<pre><code>## [1]  train-poisson-nloglik:0.598905 
 ## [101]    train-poisson-nloglik:0.353628 
 ## [201]    train-poisson-nloglik:0.348304 
 ## [301]    train-poisson-nloglik:0.346904 
@@ -1130,10 +1130,10 @@ div.tocify {
 ## 
 ## loaded via a namespace (and not attached):
 ##  [1] nlme_3.1-149      fs_1.5.0          lubridate_1.7.10  httr_1.4.2       
-##  [5] tools_4.0.3       backports_1.2.1   bslib_0.2.4       utf8_1.1.4       
+##  [5] tools_4.0.3       backports_1.2.1   bslib_0.2.4       utf8_1.2.1       
 ##  [9] R6_2.5.0          rpart_4.1-15      mgcv_1.8-33       DBI_1.1.1        
 ## [13] colorspace_2.0-0  withr_2.4.1       tidyselect_1.1.0  curl_4.3         
-## [17] compiler_4.0.3    cli_2.3.1         rvest_1.0.0       xml2_1.3.2       
+## [17] compiler_4.0.3    cli_2.4.0         rvest_1.0.0       xml2_1.3.2       
 ## [21] labeling_0.4.2    sass_0.3.1        scales_1.1.1      checkmate_2.0.0  
 ## [25] rappdirs_0.3.3    tfruns_1.5.0      digest_0.6.27     rmarkdown_2.7    
 ## [29] base64enc_0.1-3   pkgconfig_2.0.3   htmltools_0.5.1.1 highr_0.8        
@@ -1146,7 +1146,7 @@ div.tocify {
 ## [57] lattice_0.20-41   haven_2.3.1       cowplot_1.1.1     hms_1.0.0        
 ## [61] zeallot_0.1.0     knitr_1.31        pillar_1.5.1      reprex_1.0.0     
 ## [65] XML_3.99-0.6      glue_1.4.2        evaluate_0.14     rpart.plot_3.0.9 
-## [69] data.table_1.14.0 modelr_0.1.8      vctrs_0.3.6       cellranger_1.1.0 
+## [69] data.table_1.14.0 modelr_0.1.8      vctrs_0.3.7       cellranger_1.1.0 
 ## [73] gtable_0.3.0      assertthat_0.2.1  cachem_1.0.4      xfun_0.22        
 ## [77] broom_0.7.5       memoise_2.0.0     ellipsis_0.3.1</code></pre>
 <div class="sourceCode" id="cb67"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb67-1"><a href="#cb67-1" aria-hidden="true" tabindex="-1"></a>reticulate<span class="sc">::</span><span class="fu">py_config</span>()</span></code></pre></div>
@@ -1213,7 +1213,7 @@ $(document).ready(function ()  {
 
     // establish options
     var options = {
-      selectors: "h1,h2,h3",
+      selectors: "h1,h2",
       theme: "bootstrap3",
       context: '.toc-content',
       hashGenerator: function (text) {
