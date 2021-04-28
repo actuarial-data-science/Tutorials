@@ -13,5 +13,11 @@ available from https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3439358.
 - 04 GMM clustering.R
 - 05 t-SNE UMAP SOM.R
 
+### R Markdown
+- USL_SportsCar.Rmd
+- [USL_SportsCar.html](...) (please click on this link to preview html output; in order to see the table of contents properly, download the html and open it in your browser.)
+- USL_SportsCar.pdf
+- USL_SportsCar.ipynb
+
 ### Data
 - SportsCars.csv
