@@ -36,3 +36,8 @@ Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3595944
 ## 9 - Convolutional neural network case studies
 
 Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3656210
+
+## 10 - LocalGLMnet
+
+Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3900350
+
