@@ -1,0 +1,278 @@
+---
+title: Convolutional Neural Networks II
+output:
+  # disable alt text rendered as figure caption
+  html_document:
+    fig_caption: false
+  pdf_document:
+    fig_caption: false
+---
+
+# Disclaimer
+This notebook was created for the SAV block course "Deep Learning with Actuarial Applications in R".
+
+The course is based on the publications on the following website: https://www.actuarialdatascience.org/
+
+Author: Daniel Meier
+
+# Applying Convolutional Neural Networks for classification of handwritten digits
+
+## Abstract
+The [MNIST dataset](http://yann.lecun.com/exdb/mnist/), i.e. images of handwriten digits to be recognized, is a standard dataset to illustrate the strengths of (deep) convolutional neural networks (CNNs). In this notebook we construct a 7-layer CNN (not counting the batch normalizations separately) with 3 pairs of a convolutional layer followed by max pooling, and a final fully connected layer with 10 outputs for each of the 10 digits.
+
+## Introduction
+The MNIST dataset consists of 70'000 monochrome pictures of pixel size 28 x 28 and is already split into a training set of 60'000 pictures and test set of 10'000 pictures.
+
+The constructed CNN is a 7-layer network comprising
+
+* a convolutional 2D layer: 10 filters of size 3 times 3 and stepsize 1 and 1,
+* a max pooling layer: window size 2 times 2, stepsize 2 and 2,
+* a convolutional 2D layer: 20 filters of size 3 times 3 and stepsize 1 and 1,
+* a max pooling layer: window size 2 times 2, stepsize 1 and 1,
+* a convolutional 2D layer: 40 filters of size 3 times 3 and stepsize 1 and 1,
+* a max pooling layer: window size 2 times 2, stepsize 2 and 2,
+* a fully connected layer.
+
+We formulate the problem as a classification problem minimizing the categorical crossentropy and consider the resulting multi-class accuracy as metric.
+
+In Section 0 we import all necessary modules and define the most relevant parameters. In Section 1 we load the MNIST dataset and plot some examples. Section 2 constructs the CNN and applies it on the MNIST dataset. Section 3 plots the accuracy history and the confusion matrix across all 10 digits, and Section 4 shows all wrongly classified images. Section 5 considers how translations, rotations, scalings affect model performance.
+
+## 0. Import modules, definition of parameters
+
+```{r}
+options(encoding = 'UTF-8')
+
+# Loading all the necessary packages
+library("repr")  # not needed in the Rmarkdown version, only for Jupyter notebook
+library("ggplot2")
+library("keras")
+library("tensorflow")
+library("OpenImageR")
+```
+
+```{r}
+knitr::opts_chunk$set(fig.width = 9, fig.height = 7)
+#options(repr.plot.width=4, repr.plot.height=10)
+```
+
+```{r}
+validationRatio <- 0.15
+filterSize1     <- 3
+numberFilters1  <- 10
+filterSize2     <- 3
+numberFilters2  <- 20
+filterSize3     <- 3
+numberFilters3  <- 40
+numberEpochs    <- 10
+
+dataRoot <- "../../data"
+```
+
+## 1. Loading the MNIST dataset
+
+```{r}
+load_image_file <- function(filename) {
+  ret = list()
+  f = file(filename, 'rb')
+  readBin(f, 'integer', n = 1, size = 4, endian = 'big')
+  n    = readBin(f, 'integer', n = 1, size = 4, endian = 'big')
+  nrow = readBin(f, 'integer', n = 1, size = 4, endian = 'big')
+  ncol = readBin(f, 'integer', n = 1, size = 4, endian = 'big')
+  x = readBin(f, 'integer', n = n * nrow * ncol, size = 1, signed = FALSE)
+  close(f)
+  data.frame(matrix(x, ncol = nrow * ncol, byrow = TRUE))
+}
+
+load_label_file <- function(filename) {
+  f = file(filename, 'rb')
+  readBin(f, 'integer', n = 1, size = 4, endian = 'big')
+  n = readBin(f, 'integer', n = 1, size = 4, endian = 'big')
+  y = readBin(f, 'integer', n = n, size = 1, signed = FALSE)
+  close(f)
+  y
+}
+
+trainX <- load_image_file(file.path(dataRoot, "cnn2", "train-images.idx3-ubyte"))
+testX  <- load_image_file(file.path(dataRoot, "cnn2", "t10k-images.idx3-ubyte"))
+
+train_Y <- as.factor(load_label_file(file.path(dataRoot, "cnn2", "train-labels.idx1-ubyte")))
+test_Y  <- as.factor(load_label_file(file.path(dataRoot, "cnn2", "t10k-labels.idx1-ubyte")))
+
+trainX <- array_reshape(data.matrix(trainX) / 255, c(dim(trainX)[1], 28, 28, 1))
+testX <- array_reshape(data.matrix(testX) / 255, c(dim(testX)[1], 28, 28, 1))
+trainY <- to_categorical(train_Y, 10)
+testY <- to_categorical(test_Y, 10)
+
+par(mfrow = c(2, 4))
+for (j in 1:8) {
+    image(aperm(trainX[j, 28:1, , 1], c(2, 1)), col = gray(12:1 / 12))
+    title(train_Y[j])
+}
+```
+
+## 2. Constructing and fitting the CNN
+
+```{r}
+set.seed(0)
+tf$random$set_seed(0)
+
+cnn <- keras_model_sequential() %>%
+  layer_conv_2d(filters = numberFilters1, kernel_size = c(filterSize1, filterSize1),
+                strides = c(1,1), padding = 'valid', input_shape = c(28, 28, 1)) %>%
+  layer_batch_normalization() %>%
+  layer_activation('relu') %>%
+  layer_max_pooling_2d(pool_size = c(2,2), strides = c(2,2), padding = 'valid') %>%
+  
+  layer_conv_2d(filters = numberFilters2, kernel_size = c(filterSize2, filterSize2),
+                strides = c(1,1), padding = 'valid') %>%
+  layer_batch_normalization() %>%
+  layer_activation('relu') %>%
+  layer_max_pooling_2d(pool_size = c(2,2), strides = c(1,1), padding = 'valid') %>%
+  
+  layer_conv_2d(filters = numberFilters3, kernel_size = c(filterSize3, filterSize3),
+                strides = c(1,1), padding = 'valid') %>%
+  layer_batch_normalization() %>%
+  layer_activation('relu') %>%
+  layer_max_pooling_2d(pool_size = c(2,2), strides = c(2,2)) %>%
+  
+  layer_flatten() %>%
+  layer_dense(10) %>%
+  layer_activation('softmax', name = 'softmax') %>%
+  compile(loss = loss_categorical_crossentropy, optimizer = optimizer_adadelta(), metrics = c('accuracy'))
+
+# RSc: below took ~22 minutes with 1CPU / 8GB / 40 epochs
+summary <- cnn %>% fit(
+  x = trainX,
+  y = trainY,
+  epochs = numberEpochs,
+  validation_split = validationRatio,
+  batch_size = 64,
+  verbose = 1
+)
+summary(cnn)
+```
+
+## 3. Accuracy history and confusion matrix
+
+**Exercise:** Experiment with other structures/parameters of the CNN. Make use of summary(cnn) to check the dimensions of inputs/outputs of each layer. How are the dimensions affected by strides, padding, kernel_size, number of filters?
+
+**Exercise:** Change the random seeds (`set.seed(0)` and `tf$random$set_seed(0)`). If you keep the random seeds, are the results 100% reproducible?
+
+**Exercise:** Change the relu activation functions to some other activation functions.
+
+**Exercise:** The input images are gray scale images. Turn them into black-white images (only allowing values 0 and 1) and refit the model.
+
+**Exercise:** Introduce some random noise in the images, e.g. by adding i.i. uniformly distributed numbers out of the interval [-r,r]. Plot r vs accuracy for some selected r.
+
+**Exercise:** Set 0<r<28^2 random pixels to white and plot r vs accuracy for some selected r.
+
+**Exercise:** There are several other structures/parameters to be found in the web, e.g. https://keras.rstudio.com/articles/examples/mnist_cnn.html, or https://tensorflow.rstudio.com/guide/keras/, etc. not all of them necessarily make use of convolutional layers. What are the main differences between these structures? Advantages/disadvantages? Which performs best?
+
+```{r}
+plot(summary)
+print(summary)
+
+#testP <- cnn %>% predict_classes(testX)  # This is deprecated in keras/tf 2.6. In our case, below is applicable instead.
+testP <- cnn %>% predict(testX) %>% k_argmax()
+testP <- as.array(testP)
+
+confusion_matrix <- as.data.frame(table(testP, test_Y))
+
+ggplot(data = confusion_matrix, aes(x = testP, y = test_Y)) +
+  geom_tile(aes(fill = Freq)) +
+  geom_text(aes(label = sprintf("%1.0f", Freq)), vjust = 1) +
+  scale_fill_gradient(low = "white", high = "blue", trans = "log")
+```
+
+## 4. Wrongly classified images
+Images where the actual image differs from the predicted image (denoted as A and P) are shown in this section.
+
+```{r}
+incorrectIdx <- which(test_Y != testP)
+par(mfrow = c(2, 4))
+for (j in 1:8) {
+    image(aperm(testX[incorrectIdx[j], 28:1, , 1], c(2,1)), col = gray(12:1 / 12))
+    title(paste0('A: ', test_Y[incorrectIdx[j]], ', P:', testP[incorrectIdx[j]]))
+}
+
+print(paste(length(incorrectIdx), "incorrectly classified digits (out of 10'000 digits)"))
+```
+
+## 5. Rotations, translations, scalings
+
+The following 3 cells (chunks) rotate, translate and scale images. Observe how the model predictions (the softmax layer) are impacted by these transformations.
+
+```{r}
+layerModel <- keras_model(input = cnn$input, outputs = get_layer(cnn, 'softmax')$output)  # the softmax activation layer
+img <- trainX[19, 28:1, , ]
+par(mfrow = c(2, 4))
+for (j in seq(0, 315, 45)) {
+    image(aperm(rotateImage(img, j), c(2,1)), col = gray(12:1 / 12))
+    title(j)
+}
+
+activationSoftMax <- matrix(0, 360, 10)
+for (j in 1:360) {
+    imgRotated <- img
+    imgRotated <- rotateImage(img, j)[28:1, ]
+    activationSoftMax[j, ] <- layerModel %>% predict(array_reshape(imgRotated, c(1, 28, 28, 1)))
+}
+
+par(mfrow = c(1, 1))
+plot(1:360, activationSoftMax[, 7], type = "l", col = "blue", xlab = "Rotation angle", ylab = "Output of softmax layer")
+lines(1:360, activationSoftMax[, 10], col = "red")
+lines(1:360, activationSoftMax[, 9], col = "orange")
+lines(1:360, activationSoftMax[, 6], col = "magenta")
+legend("topright", legend = c("7", "10", "9", "6"), fill = c("blue", "red", "orange", "magenta"))
+```
+
+```{r}
+activationSoftMax <- array(0, c(121, 10, 18))
+par(mfrow = c(3, 6))
+for (i in 1:18) {
+    img <- trainX[i, , , ]
+    for (j in 1:121) {
+        shiftRows <- j %% 11 - 5
+        shiftCols <- floor(j / 11) - 5
+        if (shiftRows != 0 && shiftCols != 0)
+          imgShifted <- translation(img, shift_rows = shiftRows, shift_cols = shiftCols)
+        else
+          imgShifted <- img
+        activationSoftMax[j, , i] <- layerModel %>% predict(array_reshape(imgShifted, c(1, 28, 28, 1)))
+        if (j == 1) {
+            lowerRight <- imgShifted
+        }
+    }
+    image(aperm(lowerRight[28:1, ], c(2, 1)), col = gray(12:1 / 12))
+}
+par(mfrow = c(3, 6))
+for (i in 1:18) {
+    image(array_reshape(activationSoftMax[, as.numeric(train_Y[i]), i], c(11, 11)), col = gray(12:1 / 12))
+}
+```
+
+```{r}
+activationSoftMax <- array(0, c(121, 10, 18))
+par(mfrow = c(3, 6))
+for (i in 1:18) {
+    img <- trainX[i, , , ]
+    for (j in 1:121) {
+        imgZoomed <- cropImage(
+          resizeImage(img, height = round(28*((j%%11)/20+1)), width = round(28*((floor(j/11))/20+1)), method = "bilinear"),
+          new_height = 1:28,
+          new_width = 1:28,
+          type = "user_defined"
+        )
+        activationSoftMax[j, , i] <- layerModel %>% predict(array_reshape(imgZoomed, c(1, 28, 28, 1)))
+        if (j == 48) {
+            selectedImgZoom <- imgZoomed
+        }
+    }
+    image(aperm(selectedImgZoom[28:1, ], c(2, 1)), col = gray(12:1 / 12))
+}
+par(mfrow = c(3, 6))
+for (i in 1:18) {
+    image(array_reshape(activationSoftMax[, as.numeric(train_Y[i]), i], c(11, 11)), col = gray(12:1 / 12))
+}
+```
+

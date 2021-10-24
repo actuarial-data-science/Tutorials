@@ -1,0 +1,173 @@
+---
+title: Convolutional Neural Networks Bonus
+output: html_document
+---
+
+# Disclaimer
+This notebook was created for the SAV block course "Deep Learning with Actuarial Applications in R".
+
+The course is based on the publications on the following website: https://www.actuarialdatascience.org/
+
+Author: Daniel Meier
+
+# Applying Convolutional Neural Networks for image classification
+
+Inception v3 is one of the pre-trained neural networks available in the keras library. Developed by Google, Inception v3 has 23'851'784 parameters, uses 299x299x3 color images as inputs, and has 1'000 image classes, e.g. baseketball, violin, ear, etc.
+
+## 0. Load the model, classes, define functions
+
+```{python}
+import tensorflow as tf
+import json
+
+path_to_files = '../../data/cnn3/'
+model = tf.keras.applications.InceptionV3(
+    include_top=True,
+    weights= path_to_files + 'inception_v3_weights_tf_dim_ordering_tf_kernels.h5',
+    input_tensor=None,
+    input_shape=None,
+    pooling=None,
+    classes=1000
+)
+
+with open(path_to_files + 'imagenet_class_index.json') as file:
+    classes = json.load(file)
+```
+
+Number of layers of Inception v3:
+
+```{python}
+len(model.layers)
+```
+
+The complete structure of Inception v3 is quite involved...
+
+```{python}
+model.summary()
+```
+
+1'000 image classes:
+
+```{python}
+print([x[1] for x in classes.values()])
+```
+
+The function `predict` returns the full 1'000 dimensional output vector of a 299x299x3 input image.
+
+```{python}
+import numpy as np
+from keras.preprocessing import image
+from keras.applications.inception_v3 import preprocess_input
+
+def predict(model, img, target_size=(299, 299)):
+    x = image.img_to_array(img)
+    x = np.expand_dims(x, axis=0)
+    x = preprocess_input(x)
+    pred = model.predict(x)
+    return pred
+```
+
+In the following we will be using 2 methods to obtain a 299x299x3 array/image, both methods can make use of a built-in camera if available.
+
+* **Method 1:** Taking screenshots every 2 seconds and taking a 299x299 region from the screenshot as input. Note that you can use the parameters `x_shift` and `y_shift` to move this region. With the current setting the region should be located near the upper left corner of your screen.
+
+* **Method 2:** In case a built-in camera is available, this method extracts a snapshot directly from the video stream. No calibration of parameters (`x_shift`, `y_shift`) needed.
+
+```{python}
+from PIL import Image
+import base64
+import io
+
+# getting the top 5 classes based on a 299x299x3 array/image
+def get_classes(img):
+    pred = predict(model, img)[0]
+    idx = (-pred).argsort()[:5]
+    msg = ''
+    for i in idx:    
+        msg += (str(pred[i])+": "+classes[str(i)][1]+"\n")
+    return msg
+
+# getting the top 5 classes based on a PIL image
+def get_classes_pil(pil_img):
+    pil_img = Image.open(io.BytesIO(base64.b64decode(pil_img.split(',')[1])))
+    img = np.array(pil_img)
+    img = img[:,:,0:3]
+    return get_classes(img)
+```
+
+**Exercise:** Download an image file from the internet, upload it to the folder where cnn3.Rmd is located, change the img_file reference to the new file.
+
+```{python}
+img_file = 'tiger.jpg'
+img = Image.open(img_file).resize((299,299))
+print(get_classes(np.array(img)[:,:,:3]))
+```
+
+
+# Method 1
+
+
+First, calibrate parameters x_shift and y_shift such that e.g. the video stream is captured.
+Then, in order to stop the loop hit **interrupt kernel**.
+
+**Exercise:** Calibrate `x_shift` and `y_shift` parameters. Uncomment the `#break` line to obtain a plot of the captured region. Then you can also try to find some images on google and put them over the captured region to get them classified...
+
+```{python}
+import pyautogui, time
+import matplotlib.pylab as plt
+from IPython.display import clear_output
+from IPython.display import HTML
+
+HTML("""
+<video id="video" width="400" height="300" autoplay></video>
+<canvas id="canvas" width="299" height="299"></canvas>
+<script>
+var video = document.getElementById('video');
+if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    navigator.mediaDevices.getUserMedia({ video: true }).then(function(stream) {
+        video.srcObject=stream;
+        video.play();
+    });
+}
+</script>
+""")
+```
+
+```{python}
+x_shift = 550
+y_shift = 250
+while True:    
+    pil_img = pyautogui.screenshot()
+    img = np.array(pil_img)
+    img = img[y_shift:y_shift+299,x_shift:x_shift+299,0:3]
+    clear_output()
+    print(get_classes(img))
+    plt.imshow(img)
+    time.sleep(2)
+    #break
+```
+
+# Method 2
+
+* First cell: extract image from video stream into img variable
+* Second cell: print (top 5) predictions
+
+```{python}
+from IPython.display import Javascript, display
+js = """
+    var canvas = document.getElementById('canvas');
+    var context = canvas.getContext('2d');
+    var video = document.getElementById('video');
+    context.drawImage(video, -50, 0, 400, 300);
+    var myCanvas = document.getElementById('canvas');
+    var image = myCanvas.toDataURL("image/png");    
+    IPython.notebook.kernel.execute("img = '" + image + "'")    
+    """
+display(Javascript(js))
+```
+
+```{python}
+display(Image.open(io.BytesIO(base64.b64decode(img.split(',')[1]))))
+print(get_classes_pil(img))
+```
+
