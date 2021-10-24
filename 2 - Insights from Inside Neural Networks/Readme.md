@@ -10,3 +10,10 @@ available from https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3226852.
   - V0_1 pre_process data.r
   - V0_2 network architectures.r
 - V1_1 KERAS network modeling.r
+
+### Markdown / Notebooks
+- freMTPLfreq_fnn.html
+- freMTPLfreq_fnn.Rmd
+- freMTPLfreq_fnn.r
+- freMTPLfreq_fnn.pdf
+- freMTPLfreq_fnn.ipynb
