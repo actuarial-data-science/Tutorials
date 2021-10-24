@@ -4,6 +4,6 @@ Here you find the code to the article "On Boosting: Theory and Applications" fro
 available from https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3402687.
 
 
-### Python Code
+### Notebook (Python)
 - Boosting_PS_Case_Study.ipynb
-- Boosting_PS_Case_Study.html
+- [Boosting_PS_Case_Study.html](please click on this link to preview html output) 
