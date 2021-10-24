@@ -10,6 +10,9 @@ Here you find the code to the article "Convolutional neural network case studies
 - cnn2.html
 - cnn2.zip
 
+### R Notebooks
+
+
 ### Data
 - mortality rates
 - mnist data
