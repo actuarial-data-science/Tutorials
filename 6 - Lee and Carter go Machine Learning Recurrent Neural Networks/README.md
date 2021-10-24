@@ -13,5 +13,11 @@ Here you find the code to the article "Lee and Carter go Machine Learning: Recur
 - 04_a LSTM - deep 3 mortality.R
 - 04_b LSTM - deep 3 both genders.R
 
+### Notebooks (R)
+- [CHEmort_rnn.html]() (please click on this link to preview html output)
+- CHEmort_rnn.Rmd
+- CHEmort_rnn.r
+- CHEmort_rnn.ipynb
+
 ### Data
 - CHE_mort.csv
