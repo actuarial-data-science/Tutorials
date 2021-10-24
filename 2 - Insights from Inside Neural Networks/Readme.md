@@ -12,7 +12,7 @@ available from https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3226852.
 - V1_1 KERAS network modeling.r
 
 ### Notebooks / R markdown
-- [freMTPLfreq_fnn.html](https://htmlpreview.github.io/?https://github.com/JSchelldorfer/ActuarialDataScience/blob/master/2%20-%20Insights%20from%20Inside%20Neural%20Networks/freMTPLfreq_fnn.html) (please click on this link to preview html output; in order to see the table of contents properly, download the html and open it in your browser.)
+- [freMTPLfreq_fnn.html](https://htmlpreview.github.io/?https://github.com/JSchelldorfer/ActuarialDataScience/blob/master/2%20-%20Insights%20from%20Inside%20Neural%20Networks/freMTPLfreq_fnn.html) (please click on this link to preview html output)
 - freMTPLfreq_fnn.Rmd
 - freMTPLfreq_fnn.r
 - freMTPLfreq_fnn.pdf
