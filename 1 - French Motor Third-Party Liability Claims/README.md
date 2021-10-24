@@ -11,6 +11,10 @@ Here you find the code to the article "Case Study: French Motor Third-Party Liab
 - FreMTPL_4 boosting machine.r
 - FreMTPL_5 neural net - dummy coding.r
 
+### R Markdown / notebooks
+- freMTPLfreq_desc (.html,.r,.Rmd, .pdf, .ipynb) (please click on the link to preview html output; in order to see the table of contents properly, download the html and open it in your browser.)
+- freMTPLfreq_glm (.html,.r,.Rmd, .pdf, .ipynb) (please click on the link to preview html output; in order to see the table of contents properly, download the html and open it in your browser.)
+
 ### R Code using Tensorflow*
 - FreMTPL_TensorFlow.nb.html
 - FreMTPL_TensorFlow.Rmd
