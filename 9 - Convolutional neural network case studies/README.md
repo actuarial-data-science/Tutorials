@@ -7,7 +7,7 @@ Here you find the code to the article "Convolutional neural network case studies
 - [cnn1.html](https://htmlpreview.github.io/?https://github.com/JSchelldorfer/ActuarialDataScience/blob/master/9%20-%20Convolutional%20neural%20network%20case%20studies/cnn1.html)
 - cnn1.zip
 - cnn2.ipynb
-- cnn2.html
+- [cnn2.html](https://htmlpreview.github.io/?https://github.com/JSchelldorfer/ActuarialDataScience/blob/master/9%20-%20Convolutional%20neural%20network%20case%20studies/cnn2.html)
 - cnn2.zip
 
 ### R Notebooks
