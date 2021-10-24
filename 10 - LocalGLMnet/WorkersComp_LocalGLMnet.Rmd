@@ -1,0 +1,2226 @@
+---
+title: Local GLM Net (LGN)
+output:
+  # disable alt text rendered as figure caption
+  html_document:
+    fig_caption: false
+  pdf_document:
+    fig_caption: false
+---
+
+# **Worker's Compensation Claims**
+
+Daniel Meier and Jürg Schelldorfer, with support from Mario V. Wüthrich and [Mirai Solutions GmbH](https://mirai-solutions.ch/).
+
+2021-10-15
+
+# Introduction
+
+This notebook was created for the course "Deep Learning with Actuarial Applications in R" of the Swiss Association of Actuaries (https://www.actuaries.ch/).
+
+This notebook serves as accompanion to the tutorial “LocalGLMnet: a deep learning architecture for actuaries”, available on [SSRN](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3900350).
+
+The code is similar to the code used in above tutorial and combines the raw R code in the scripts, available on [GitHub](https://github.com/JSchelldorfer/ActuarialDataScience/tree/master/10%20-%20LocalGLMnet) along with some more comments. Please refer to the tutorial for explanations.
+
+Note that the results might vary depending on the R and Python package versions, see last section for the result of `sessionInfo()` and corresponding info on the Python setup.
+
+# Data Preparation
+
+The tutorial uses the synthetically generated worker compensation insurance claims data set available on [openML (ID 42876)](https://www.openml.org/d/42876).
+
+## Load packages and data
+
+```{r}
+library(keras)
+library(locfit)
+library(magrittr)
+library(dplyr)
+library(tibble)
+library(purrr)
+library(ggplot2)
+library(gridExtra)
+library(tidyr)
+library(corrplot)
+RNGversion("3.5.0")
+```
+
+## Set global parameters
+
+```{r}
+options(encoding = 'UTF-8')
+```
+
+```{r}
+# set seed to obtain best reproducibility. note that the underlying architecture may affect results nonetheless, so full reproducibility cannot be guaranteed across different platforms.
+seed <- 100
+Sys.setenv(PYTHONHASHSEED = seed)
+set.seed(seed)
+reticulate::py_set_seed(seed)
+tensorflow::tf$random$set_seed(seed)
+```
+
+```{r}
+# https://stackoverflow.com/questions/65366442/cannot-convert-a-symbolic-keras-input-output-to-a-numpy-array-typeerror-when-usi
+# https://tensorflow.rstudio.com/guide/tfhub/examples/feature_column/
+tensorflow::tf$compat$v1$disable_eager_execution()
+```
+
+```{r}
+ax_limit <- c(0,50000)
+line_size <- 1.1
+```
+
+The results below will not exactly match the results in the paper, since some packages and random seeds are different. However, the general conclusions remain the same.
+
+## Helper functions
+
+Subsequently, for ease of reading, we provide all the helper functions which are used in this tutorial in this section.
+
+```{r}
+# MinMax scaler
+preprocess_minmax <- function(varData) {
+  X <- as.numeric(varData)
+  2 * (X - min(X)) / (max(X) - min(X)) - 1
+}
+```
+
+```{r}
+# One Hot encoding for categorical features
+preprocess_cat_onehot <- function(data, varName, prefix) {
+  varData <- data[[varName]]
+  X <- as.integer(varData)
+  n0 <- length(unique(X))
+  n1 <- 1:n0
+  addCols <- purrr::map(n1, function(x, y) {as.integer(y == x)}, y = X) %>%
+    rlang::set_names(paste0(prefix, n1))
+  cbind(data, addCols)
+}
+```
+
+```{r}
+#https://stat.ethz.ch/pipermail/r-help/2013-July/356936.html
+scale_no_attr <- function (x, center = TRUE, scale = TRUE) 
+{
+    x <- as.matrix(x)
+    nc <- ncol(x)
+    if (is.logical(center)) {
+        if (center) {
+            center <- colMeans(x, na.rm = TRUE)
+            x <- sweep(x, 2L, center, check.margin = FALSE)
+        }
+    }
+    else if (is.numeric(center) && (length(center) == nc)) 
+        x <- sweep(x, 2L, center, check.margin = FALSE)
+    else stop("length of 'center' must equal the number of columns of 'x'")
+    if (is.logical(scale)) {
+        if (scale) {
+            f <- function(v) {
+                v <- v[!is.na(v)]
+                sqrt(sum(v^2)/max(1, length(v) - 1L))
+            }
+            scale <- apply(x, 2L, f)
+            x <- sweep(x, 2L, scale, "/", check.margin = FALSE)
+        }
+    }
+    else if (is.numeric(scale) && length(scale) == nc) 
+        x <- sweep(x, 2L, scale, "/", check.margin = FALSE)
+    else stop("length of 'scale' must equal the number of columns of 'x'")
+    #if (is.numeric(center)) 
+    #    attr(x, "scaled:center") <- center
+    #if (is.numeric(scale)) 
+    #    attr(x, "scaled:scale") <- scale
+    x
+}
+```
+
+```{r}
+square_loss <- function(y_true, y_pred){mean((y_true-y_pred)^2)}
+gamma_loss  <- function(y_true, y_pred){2*mean((y_true-y_pred)/y_pred + log(y_pred/y_true))}
+ig_loss     <- function(y_true, y_pred){mean((y_true-y_pred)^2/(y_pred^2*y_true))}
+p_loss      <- function(y_true, y_pred, p){2*mean(y_true^(2-p)/((1-p)*(2-p))-y_true*y_pred^(1-p)/(1-p)+y_pred^(2-p)/(2-p))}
+
+k_gamma_loss  <- function(y_true, y_pred){2*k_mean(y_true/y_pred - 1 - log(y_true/y_pred))}
+k_ig_loss     <- function(y_true, y_pred){k_mean((y_true-y_pred)^2/(y_pred^2*y_true))}
+k_p_loss      <- function(y_true, y_pred){2*k_mean(y_true^(2-p)/((1-p)*(2-p))-y_true*y_pred^(1-p)/(1-p)+y_pred^(2-p)/(2-p))}
+```
+
+```{r}
+keras_plot_loss_min <- function(x, seed) {
+    x <- x[[2]]
+    ylim <- range(x)
+    vmin <- which.min(x$val_loss)
+    df_val <- data.frame(epoch = 1:length(x$loss), train_loss = x$loss, val_loss = x$val_loss)
+    df_val <- gather(df_val, variable, loss, -epoch)
+    plt <- ggplot(df_val, aes(x = epoch, y = loss, group = variable, color = variable)) +
+      geom_line(size = line_size) + geom_vline(xintercept = vmin, color = "green", size = line_size) +
+      labs(title = paste("Train and validation loss for seed", seed),
+           subtitle = paste("Green line: Smallest validation loss for epoch", vmin))
+    suppressMessages(print(plt))
+}
+```
+
+```{r}
+plot_size <- function(test, xvar, title, model, mdlvariant) {
+  out <- test %>% group_by(!!sym(xvar)) %>%
+    summarize(obs = mean(Claim) , pred = mean(!!sym(mdlvariant)))
+  
+  ggplot(out, aes(x = !!sym(xvar), group = 1)) +
+    geom_point(aes(y = pred, colour = model)) +
+    geom_point(aes(y = obs, colour = "observed")) +
+    geom_line(aes(y = pred, colour = model), linetype = "dashed") +
+    geom_line(aes(y = obs, colour = "observed"), linetype = "dashed") +
+    ylim(ax_limit) + labs(x = xvar, y = "claim size", title = title) +
+    theme(legend.position = "bottom")
+}
+```
+
+## Load data
+
+This dataset describes 100'000 realistic, synthetically generated worker compensation insurance claims. Along the ultimate financial losses, each claim is described by the initial case estimate, date of accident and reporting date, a text describing the accident and demographic info on the worker.
+The dataset was kindly created and provided by Colin Priest. While similar, it is not identical to the dataset used in www.kaggle.com/c/actuarial-loss-estimation.
+
+Before we can use this data set we need to do some data cleaning. This pre-processed data can be downloaded from the course GitHub page [here](https://github.com/JSchelldorfer/DeepLearningWithActuarialApplications/tree/master/0_data). You also find at the same place the details for this pre-processing.
+
+```{r}
+load(file.path("../0_data/WorkersComp.RData"))  # relative path to .Rmd file
+```
+
+## General data preprocessing
+
+We drop 10 claims with claim occurrence year 1987. This provides us with 99'990 claims, all having occurred between 1988/01/01 and 2006/07/20. These claims have been reported in the calendar years from 1998 to 2008. The maximal reporting delay is 1'042 days, this corresponds to 2.85 years or to almost 149 weeks.
+We drop all claims with non-positive HoursWorkedPerWeek.
+
+```{r}
+dat <- WorkersComp %>% filter(AccYear > 1987, HoursWorkedPerWeek > 0)
+```
+
+```{r}
+# Order claims in decreasing order for split train/test (see below), and add an ID
+dat <- dat %>% arrange(desc(Claim))
+dat <- dat %>% mutate(Id=1:nrow(dat))
+```
+
+For successful regression modeling we need to pre-process (raw) covariate information. Moreover, continuous and binary variables are normalized to having zero mean and unit variance, i.e., having raw covariates, the j-th raw covariate component is normalized by
+
+![8_LocalGLMnet](Figure_normalization.PNG)
+
+where the empirical mean and the empirical standard deviation (stddev) are calculated for fixed component $j$ over all available claims $i$.
+
+$\Rightarrow$ Standardization of continuous and binary variables to zero mean and unit variance is going to be important because comparison of variables requires that they live on the same scale.
+
+```{r}
+# scaling and cut-off
+dat <- dat %>% mutate(
+        Age = pmax(16, pmin(70, Age)),
+        AgeNN = scale_no_attr(Age),
+        GenderNN = as.integer(Gender),
+        GenderNN = scale_no_attr(GenderNN),
+        DependentChildren = pmin(1, DependentChildren),
+        DependentChildrenNN = scale_no_attr(DependentChildren),
+        DependentsOther = pmin(1, DependentsOther),
+        DependentsOtherNN = scale_no_attr(DependentsOther),
+        WeeklyPay = pmin(1200, WeeklyPay),
+        WeeklyPayNN = scale_no_attr(WeeklyPay),
+        PartTimeFullTimeNN = scale_no_attr(as.integer(PartTimeFullTime)),
+        HoursWorkedPerWeek = pmin(60, HoursWorkedPerWeek),
+        HoursWorkedPerWeekNN = scale_no_attr(HoursWorkedPerWeek),
+        DaysWorkedPerWeekNN = scale_no_attr(DaysWorkedPerWeek),
+        AccYearNN = scale_no_attr(AccYear),
+        AccMonthNN = scale_no_attr(AccMonth),
+        AccWeekdayNN = scale_no_attr(AccWeekday),
+        AccTimeNN = scale_no_attr(AccTime),
+        RepDelay = pmin(100, RepDelay),
+        RepDelayNN = scale_no_attr(RepDelay)
+)
+```
+
+**Exercise:** We cut several variables at a maximal value. Exclude this in order to understand why we have applied an upper threshold for these variables using the subsequent statistics and charts.
+
+Categorical (nominal) variables with more than two levels are pre-processed by one-hot encoding. Assume that the $j$-th raw covariate component is a categorical variable with $L$ levels labeled by $c_1, c_2,..., c_L$. One-hot encoding maps these $L$ levels to the $L$ unit vectors of the Euclidean space $\mathbb{R}^L$. Thus, having raw categorical variable, we receive its one-hot encoding by the embedding
+
+![8_LocalGLMnet](Figure_cat_normalization.PNG)
+
+Note that one-hot encoding is different from dummy coding. Dummy coding selects a reference level and maps the levels different from the reference level to the $L - 1$ unit vectors of the
+Euclidean space $\mathbb{R}^{L-1}$. Dummy coding leads to full rank design matrices which is important in GLM. One-hot encoding does not give full rank design matrices because we have one redundancy
+in this encoding, however, this is exactly needed, here, and it will be explained below.
+
+$\Rightarrow$ We require one-hot encoding for categorical variables with more than two levels. This
+does not lead to full rank design matrices, however, this is not a necessary property in the
+LocalGLMnet approach.
+
+```{r}
+# one-hot encoding (not dummy encoding!)
+dat <- dat %>% preprocess_cat_onehot("MaritalStatus", "Marital")
+```
+
+In view of variable selection (see below), we need to understand whether for some components $j$ we have to analyze the null hypothesis $H_0$ for that $j$. In order to make this decision we extend the original covariates xi by additional information that does not belong to our data.
+
+These two additional components will be taken purely at random and, thus, they cannot contain any systematic effects explaining the response $Y$.
+
+```{r}
+# add two additional randomly generated features (later used)
+set.seed(seed)
+
+dat <- dat %>% mutate(
+    RandNN = rnorm(nrow(dat)),
+    RandNN = scale_no_attr(RandNN),
+    RandUN = runif(nrow(dat), min = -sqrt(3), max = sqrt(3)),
+    RandUN = scale_no_attr(RandUN)
+)
+```
+
+## Inspect the prepared dataset
+
+```{r}
+head(dat)
+```
+
+```{r}
+str(dat)
+```
+
+```{r}
+summary(dat)
+```
+
+## Split train and test data
+
+To perform a proper out-of-sample generalization analysis we partition our data into a learning data set $\mathcal{L}$ and a test data set $\mathcal{T}$ . We hold on to the same partitioning throughout this notebook to have comparability across all methods studied. The learning data set $\mathcal{L}$ will be used for model fitting (this includes early stopping rules in gradient descent fitting), and the test data set $\mathcal{T}$ will only be used for out-of-sample predictive performance analyses.
+
+The empirical analysis of our data has shown that the claim averages are non-stationary over time and that claim sizes follow a highly skewed distribution. To have learning and test data sets sharing similar properties w.r.t. claim sizes we partition the entire data in a stratifieed way into learning data set $\mathcal{L}$ and test data set $\mathcal{T}$ in a ratio 4 : 1. That is, we order the claims w.r.t. their claim sizes. Then, we select at random 1 claim from the 5 biggest ones for $\mathcal{T}$ , 1 claim from the 5 second biggest ones for $\mathcal{T}$ , and so on, and the non-selected claims are allocated to $\mathcal{L}$. This random allocation provides us with a learning data set $\mathcal{L}$ and a test data set $\mathcal{T}$.
+
+$\Rightarrow$ The general assumption is that all data $(Y_i, x_i)$ are independent and identical distributed (i.i.d.), and we are going to determine the conditional distribution (in-sample) of $Y_i$, given $x_i$, which can then be used to forecast (out-of-sample) $Y_t$, given $x_t$.
+
+```{r}
+idx <- sample(x = c(1:5), size = ceiling(nrow(dat) / 5), replace = TRUE)
+idx <- (1:ceiling(nrow(dat) / 5) - 1) * 5 + idx
+
+test <- dat[intersect(idx, 1:nrow(dat)), ]
+learn <- dat[setdiff(1:nrow(dat), idx), ]
+
+learn <- learn[sample(1:nrow(learn)), ]
+test <- test[sample(1:nrow(test)), ]
+```
+
+```{r}
+# size of train/test
+sprintf("Number of observations (learn): %s", nrow(learn))
+sprintf("Number of observations (test): %s", nrow(test))
+```
+
+```{r}
+# Claims average of learn/test
+sprintf("Empirical claims average (learn): %s", round(sum(learn$Claim) / length(learn$Claim), 0))
+sprintf("Empirical claims average (test): %s", round(sum(test$Claim) / length(test$Claim), 0))
+```
+
+```{r}
+# Quantiles of learn/test
+probs <- c(.1, .25, .5, .75, .9)
+bind_rows(quantile(learn$Claim, probs = probs), quantile(test$Claim, probs = probs))
+```
+
+**Exercise**: Use the standard 80/20 split for the learning and test set and compare the result. Can you follow the reasons to split differently?
+
+## Store model results
+
+As we are going to compare various models, we create a table which stores the metrics we are going to use for the comparison and the selection of the best model.
+
+```{r}
+# initialize table to store all model results for comparison
+df_cmp <- tibble(
+ model = character(),
+ learn_p2 = numeric(),
+ learn_pp = numeric(),
+ learn_p3 = numeric(),
+ test_p2 = numeric(),
+ test_pp = numeric(),
+ test_p3 = numeric(),
+ avg_size = numeric(),
+)
+```
+
+In the following chapters, we are going to fit various models to the data. At the end, we will compare the performance and quality of the several fitted models. We compare them by using the metrics defined above.
+
+# Descriptive analysis
+
+## Reporting Delay summary statistics
+
+This provides us claims all having occurred between 1988/01/01 and 2006/07/20.
+
+```{r}
+range(dat$AccYear)
+```
+
+These claims have been reported in the calendar years from 1998 to 2008.
+
+```{r}
+range(dat$RepYear)
+```
+
+We have limited the maximum reporting delay to 100 (see above).
+
+```{r}
+range(dat$RepDelay)
+```
+
+```{r}
+round(range(dat$RepDelay) / 365, 4)
+```
+
+```{r}
+round(range(dat$RepDelay) / 7, 4)
+```
+
+```{r}
+round(mean(dat$RepDelay) / 7, 4)
+```
+
+```{r}
+# define acc_week, rep_week and RepDelay_week
+min_accDay <- min(dat$AccDay)
+dat <- dat %>% mutate(
+    acc_week = floor((AccDay - min_accDay) / 7),
+    rep_week = floor((RepDay - min_accDay) / 7),
+    RepDelay_week = rep_week - acc_week
+)
+```
+
+```{r}
+quantile(dat$RepDelay_week, probs = c(.9, .98, .99))
+```
+
+```{r}
+acc1 <- dat %>% group_by(acc_week, rep_week) %>% summarize(nr = n())
+acc2 <- dat %>% group_by(acc_week) %>% summarize(mm = mean(RepDelay_week))
+```
+
+```{r}
+head(acc1)
+```
+
+```{r}
+head(acc2)
+```
+
+```{r}
+# to plot the quantiles
+qq0 <- c(.9, .975, .99)
+qq1 <- quantile(dat$RepDelay_week, probs = qq0)
+qq1
+```
+
+```{r}
+ggplot(acc1, aes(x = rep_week - acc_week, y = max(acc_week) - acc_week)) +
+    geom_point() +
+    geom_point(data = acc2, aes(x = mm, y = acc_week), color = "cyan") +
+    geom_vline(xintercept = qq1, color = "orange", size = line_size) +
+    scale_y_continuous(
+      labels = rev(c(min(dat$AccYear):(max(dat$AccYear) + 1))),
+      breaks = c(0:(max(dat$AccYear) - min(dat$AccYear) + 1)) * 365 / 7 - 25
+    ) + labs(title = "Claims reporting", x = "reporting delay (in weeks)", y = "accident date")
+```
+
+The figure above shows the accident dates vs. the reporting delays of these claims (in weekly units), the cyan dots give the weekly averages; The orange vertical lines show the 90%, 97.5% and 99% quantiles at 11, 25 and 39 weeks. From this plot we cannot detect any trends in reporting delays, i.e., it suggests a stationary reporting behavior over time.
+
+## Claim size summary statistics
+
+The claim amounts of these accident insurance claims range from 20 to 3'136'046.
+
+```{r}
+range(dat$Claim)
+```
+
+And the key statistics from the claim amount distribution are as follows.
+
+```{r}
+summary(dat$Claim)
+```
+
+The figures below show empirical plots of these claim amounts, with two transformations applied to the claim amounts for better visualizations. The plots show that the empirical density is unimodal.
+
+```{r}
+p1 <- ggplot(dat %>% filter(Claim <= 10000), aes(x = Claim)) + geom_density(colour = "blue") +
+    labs(title = "Empirical density of claims amounts", x = "claims amounts (<=10000)", y = "empirical density")
+
+p2 <- ggplot(dat, aes(x = log(Claim))) + geom_density(colour = "blue") +
+    labs(title = "Empirical density of log(claims amounts)", x = "claims amounts", y = "empirical density")
+
+p3 <- ggplot(dat, aes(x = Claim^(1/3))) + geom_density(colour = "blue") +
+    labs(title = "Empirical density of claims amounts^(1/3)", x = "claims amounts", y = "empirical density")
+
+grid.arrange(p1, p2, p3, ncol = 2)
+```
+
+## Log-log plot
+
+Below we show the log-log plot indicating heavy-tailedness, i.e., resembling asymptotically a straight line with negative slope.
+
+```{r}
+pp <- ecdf(dat$Claim)
+xx <- min(log(dat$Claim)) + 0:100/100 * (max(log(dat$Claim)) - min(log(dat$Claim)))
+ES <- predict(locfit(log(1.00001 - pp(dat$Claim)) ~ log(dat$Claim), alpha = 0.1, deg = 2), newdata = xx)
+dat_loglog <- data.frame(xx = xx, ES = ES)
+```
+
+```{r}
+ggplot(dat_loglog, aes(x = xx, y = ES)) + geom_line(colour = "blue", size = line_size) +
+    geom_vline(xintercept = log(c(1:10) * 1000), colour = "green", linetype = "dashed") +
+    geom_vline(xintercept = log(c(1:10) * 10000), colour = "yellow", linetype = "dashed") +
+    geom_vline(xintercept = log(c(1:10) * 100000), colour = "orange", linetype = "dashed") +
+    geom_vline(xintercept = log(c(1:10) * 1000000), colour = "red", linetype = "dashed") +
+    labs(title = "log-log plot of claim amounts", x = "logged claim amount", y = "logged survival probability") +
+    scale_x_continuous(breaks = seq(3,16,1))
+```
+
+## Marginal plots
+
+The claims are supported by various covariates. We will not further discuss the meaning of these covariates as their names are rather self-explanatory. ClaimsDescription contains a short claim description, and InitialClaimsEstimate the initial case estimate.
+
+Moreover, the accident date, accident daytime and the reporting date, allow us to calculate time related variables such as the reporting delay, but also the weekday of the accident, the accident month and the accident year. We are going to use this information as covariates
+for claim prediction because claims maybe influenced by the daytime, the weekday, the season expressed by the calendar months, and the accident year in case of non-stationarity.
+
+```{r}
+col_names <- c("Age","Gender","MaritalStatus","DependentChildren","DependentsOther",
+               "WeeklyPay","PartTimeFullTime","HoursWorkedPerWeek","DaysWorkedPerWeek",
+               "AccYear","AccMonth","AccWeekday","AccTime","RepDelay")
+
+global_avg <- mean(dat$Claim)
+severity_limits <- c(0,40000)
+```
+
+```{r}
+dat_tmp <- dat
+dat_tmp <- dat_tmp %>% mutate(
+    WeeklyPay = pmin(1200, ceiling(WeeklyPay / 100) * 100),
+    HoursWorkedPerWeek = pmin(60, HoursWorkedPerWeek),
+    RepDelay = pmin(100, floor(RepDelay / 10) * 10)
+)
+```
+
+In the subsequent figures we show the number of claims and the average claim amounts per AccYear, AccMonth and AccWeekday; all plots of average claim amounts have the same y-scale `severity_limits` and the same blue overall average claim amount called `global_avg`. The horizontal green line is the average number of claims per class shown on the x-axis.
+
+For the last year 2016 we only have data until July 20. We observe that claim averages are increasing over time. AccMonth is fairly uniform and we have less accidents on weekends, however, this does not significantly influence the claim averages. Accidents during night times are less frequent but more expensive, and reporting delay does not have a major impact on claim averages. We censor reporting delay at 100 days, because of scarcity of data beyond and because of right-skewness of reporting delays.
+
+For regression modeling, we will censor Age at ages 16 and 70 because observations beyond these censoring points are scarce. We will censor DependentChildren and DependentsOther at 1, to differentiate 0 and 1, this provides us with binary variables. WeeklyPay is shown censored at 1'200. HoursWorkedPerWeek is censored at 60.
+
+```{r loop_plot, fig.height=6, fig.width=9}
+for (k in 1:length(col_names)) {
+    xvar <- col_names[k]
+    
+    out <- dat_tmp %>% group_by(!!sym(xvar)) %>% summarize(vol = n(), avg = mean(Claim))
+
+    tmp <- dat_tmp %>% select(!!sym(xvar))
+    global_n <- nrow(dat_tmp) / length(levels(factor(tmp[[1]])))
+
+    plt1 <- ggplot(out, aes(x = !!sym(xvar), group = 1)) + geom_bar(aes(weight = vol), fill = "gray40") +
+        geom_hline(yintercept = global_n, colour = "green", size = line_size) +
+        labs(title = paste("Number of claims:", col_names[k]), x = col_names[k], y = "claim counts")
+
+    plt2 <- ggplot(out, aes(x = !!sym(xvar), group = 1)) + geom_bar(aes(weight = avg), fill = "gray60") +
+        geom_hline(yintercept = global_avg, colour = "blue", size = line_size) +
+        coord_cartesian(ylim = severity_limits) +
+        labs(title = paste("Average claim amount:", col_names[k]), x = col_names[k], y = "average claim amount")
+
+    grid.arrange(plt1, plt2, ncol = 2, top = col_names[k])
+}
+```
+
+The levels of these covariates show some sensitivities in claim averages, and our goal is to fit a regression model to the individual claim sizes to understand systematic effects in the claim amounts and the significance of these differences.
+
+## Feature correlation
+
+Analyzing dependence between covariate components, see table below, we find positive correlation between WeeklyPay, Age, DaysWorkedPerWeek and HoursWorkedPerWeek, which, of course, makes perfect sense from a practical point of view. We also find positive correlation between AccYear and HoursWorkedPerWeek. A further analysis of this positive correlation shows that it comes from the fact that in the early years from 1988 to 1994 roughly 1'500 claims per year have HoursWorkedPerWeek equal to 0, and after 1994 such zeros have almost completely disappeared. Probably such zeros in early years are missing data; to not
+distort our analysis, we have simply dropped these claims.
+
+```{r}
+sel_col <- c("Age","WeeklyPay","HoursWorkedPerWeek","DaysWorkedPerWeek",
+             "AccYear","AccMonth","AccWeekday","AccTime","RepDelay")
+dat_tmp <- dat[, sel_col]
+```
+
+```{r}
+corrMat <- round(cor(dat_tmp, method = "pearson"), 2)
+corrMat
+corrplot(corrMat, method = "color")
+```
+
+```{r}
+corrMat <- round(cor(dat_tmp, method = "spearman"), 2)
+corrMat
+corrplot(corrMat, method = "color")
+```
+
+**Exercise:** Do not exclude the 1'500 claims with zero HoursWokredPerWeek and follow our rationales for excluding them.
+
+# Theory: Claim size modelling
+
+Below, we show some screenshots from the tutorial on the tweedie distribution for claim size modelling. See the tutorial for additional theoretical considerations.
+
+![8_LocalGLMnet](Figure_claimSizeTheory1.PNG)
+
+![8_LocalGLMnet](Figure_claimSizeTheory2.PNG)
+
+# General modelling: parameters
+
+First, we define the two parameters containing the features for the regression modeling, differentiating between the name of the feature and the (standardized) features in the data.
+
+```{r}
+# used/selected features
+col_features <- c("AgeNN","GenderNN","DependentChildrenNN","DependentsOtherNN",
+                  "WeeklyPayNN","PartTimeFullTimeNN","HoursWorkedPerWeekNN",
+                  "DaysWorkedPerWeekNN","AccYearNN","AccMonthNN","AccWeekdayNN",
+                  "AccTimeNN","RepDelayNN","Marital1","Marital2","Marital3")
+col_names <- c("Age","Gender","DependentChildren","DependentsOther","WeeklyPay",
+               "PartTimeFullTime","HoursWorkedPerWeek","DaysWorkedPerWeek",
+               "AccYear","AccMonth","AccWeekday","AccTime","RepDelay",
+               "Marital1","Marital2","Marital3")
+```
+
+We choose a value $2 < p < 3$ as proposed in the theoretical part above.
+
+```{r}
+# select p in [2,3]
+p <- 2.5
+```
+
+# Model(s) 0: Null model
+
+We fit the null model for power variance parameters $p = 2$ (gamma model), $p = 2.5$ and $p = 3$ (inverse Gaussian model) to the accident insurance claim data.
+
+In the null model the MLE is easily obtained , and it does not depend on the specific choice of $p$.
+
+```{r}
+# homogeneous model (learn)
+(size_hom <- round(mean(learn$Claim)))
+log_size_hom <- log(size_hom)
+```
+
+```{r}
+df_cmp %<>% bind_rows(
+  data.frame(
+    model = "Null model",
+    learn_p2 = round(gamma_loss(learn$Claim, size_hom), 4),
+    learn_pp = round(p_loss(learn$Claim, size_hom, p) * 10, 4),
+    learn_p3 = round(ig_loss(learn$Claim, size_hom) * 1000, 4),
+    test_p2 = round(gamma_loss(test$Claim, size_hom), 4),
+    test_pp = round(p_loss(test$Claim, size_hom, p) * 10, 4),
+    test_p3 = round(ig_loss(test$Claim, size_hom) * 1000, 4),
+    avg_size = round(size_hom, 0)
+  ))
+df_cmp
+```
+
+The table shows the resulting in-sample and out-of-sample deviance losses for power variance parameters $p = 2, 2.5, 3$. We use these results as benchmarks for the subsequent models. We remark that the losses in this table live on different scales for
+different power variance parameters $p$ because the unit deviances take different functional forms for different p's.
+
+# Designing Neural Networks
+
+We do not provide much details in this notebook on the choice of a particular network architecture and its calibration. We refer to the notebook and tutorial on Feed-Forward Neural Networks (FNN) for the French Motor Third Party Liability Claims for the details, see [here](https://github.com/JSchelldorfer/ActuarialDataScience/tree/master/2%20-%20Insights%20from%20Inside%20Neural%20Networks) (tutorial) or [here](https://github.com/JSchelldorfer/ActuarialDataScience/tree/master/2%20-%20Insights%20from%20Inside%20Neural%20Networks) (notebook)
+
+## Epochs and batches
+
+Epochs indicates how many times we go through the entire learning data $\mathcal{D}$, and batch size indicates the size of the subsamples considered in each Gradient Descent Method (GDM) step. Thus, if the batch size is equal to the number of observations $n$ we do exactly one GDM step in one epoch, if the batch size is equal to 1 then we do n GDM steps in one epoch until we have seen the entire learning data  $\mathcal{D}$. Note that smaller batches are needed for big data because it is not feasible to simultaneously calculate the gradient on all data efficiently if we have many observations. Therefore, we partition the entire data at random into (mini-) batches in the application of the GDM. Note that this partitioning of the data is of particular interest if we work with big data because it allows us to explore the data sequentially.
+    
+Concretly, for the maximal batch size $n$ we can do exactly one GDM step in one epoch, for batch size $k$ we can do $n/k$ GDM steps in one epoch. For the maximal batch size we need to calculate the gradient on the entire data $\mathcal{D}$. The latter is, of course, much faster but on the other hand we need to calculate $n/k$ gradients to run through the entire data (in an epoch).
+
+The partitioning of the data  $\mathcal{D}$ into batches is done at random, and it may happen that several potential outliers lie in the same batch. This happens especially if the chosen batch size is small and the expected frequency is low (class imbalance problem).
+
+# Model(s) 1: Plain-vanilla Neural Networks
+
+We do not discuss here the definition of feed-forward neural networks (FFN) and details for the fitting, see the corresponding tutorial and the references therein for further details.
+
+We fit a FFN network architecture to the different deviance losses $L_p$ with power variance
+parameters $p = 2$ (gamma model), $p = 2.5$ and $p = 3$ (inverse Gaussian (IG) model) to the
+accident insurance claim data. As depth of the FNN network we choose $d = 3$ having $(q_1, q_2, q_3) = (20, 15, 10)$ neurons in the FFN layers. We choose hyperbolic tangent activation function for $\phi_m$, $1 \le m \le d$, and log-link for $g$. The latter is not the canonical link
+for power variance parameters $p \ge 2$, but it ensures that range and domain of the link function $g$ match the effective domain and the means $\mu(\theta)$ for power variance parameters $p \ge 2$.
+
+## Common neural network specifications
+
+Below we define the network parameters.
+
+```{r}
+# Size of input for neural networks
+q0 <- length(col_features)
+qqq <- c(q0, c(20,15,10), 1)
+
+sprintf("Neural network with K=3 hidden layer")
+sprintf("Input feature dimension: q0 = %s", q0)
+sprintf("Number of hidden neurons first layer: q1 = %s", qqq[2])
+sprintf("Number of hidden neurons second layer: q2 = %s", qqq[3])
+sprintf("Number of hidden neurons third layer: q3 = %s", qqq[4])
+sprintf("Output dimension: %s", qqq[5])
+```
+
+Below we define the response, learning and testing matrix required as input to the `keras` functions.
+
+```{r}
+# matrices
+YY <- as.matrix(as.numeric(learn$Claim))
+XX <- as.matrix(learn[, col_features]) 
+TT <- as.matrix(test[, col_features]) 
+```
+
+## Plain-vanilla Gamma Neural Network (p=2)
+
+### Definition
+
+In this notebook we do not provide further details on the layers used and the structure, we refer to other notebooks or the references at the end of this notebook. A good reference is the keras cheat sheet.
+
+```{r}
+Design  <- layer_input(shape = c(qqq[1]), dtype = 'float32', name = 'design')
+
+Output <- Design %>%    
+    layer_dense(units = qqq[2], activation = 'tanh', name = 'layer1') %>%
+    layer_dense(units = qqq[3], activation = 'tanh', name = 'layer2') %>%
+    layer_dense(units = qqq[4], activation = 'tanh', name = 'layer3') %>%
+    layer_dense(units = 1, activation = 'exponential', name = 'output', 
+                weights = list(array(0, dim = c(qqq[4], 1)), array(log_size_hom, dim = c(1))))
+
+model_p2 <- keras_model(inputs = list(Design), outputs = c(Output))
+```
+
+### Compilation
+
+Let us compile the model, using the tweedie deviance loss function as objective function, and nadam as the optimizer, and we provide a summary of the network structure.
+
+For further details, we refer to the help file of compile [here](https://keras.rstudio.com/reference/compile.html).
+
+```{r}
+model_p2 %>% compile(
+    loss = k_gamma_loss,
+    optimizer = 'nadam'
+)
+
+summary(model_p2)
+```
+
+This summary is crucial for a good understanding of the fitted model. It contains the total number of parameters and shows what the exposure is included as an offset (without training the corresponding weight).
+
+### Fitting
+
+For fitting a keras model and its arguments, we refer to the help of `fit` [here](https://keras.rstudio.com/reference/fit.html). There you find details about the `validation_split` and the `verbose` argument.
+
+If validation_split>0, then the training set is further subdivided into a new training and a validation set. The new training set is used for fitting the model and the validation set is used for (out-of-sample) validation. We emphasize that the validation set is chosen disjointly from the test data, as this latter data may still be used later for the choice of the optimal model (if, for instance, we need to decide between several networks). With validation_split=0.2 we split the learning data 8:2 into training set and validation set. We fit the network on the training set and we out-of-sample validate it on the validation set.
+
+We choose a mini-batch size of 5'000 and the maximum number of epochs to be 100.
+
+```{r}
+# set hyperparameters
+epochs <- 100
+batch_size <- 5000
+validation_split <- 0.2 # set to >0 to see train/validation loss in plot(fit)
+verbose <- 1
+```
+
+The number of epochs defines how many times we go through the entire learning data $\mathcal{D}$. Hence the best result is not achieved by the network with the maximum number of epochs, but rather an epoch value below the maximum. As a consequence, we only need the model with the minium validation loss on the validation set.
+This is achieved through the `callback_model_checkpoint` function [here](https://tensorflow.rstudio.com/reference/keras/callback_model_checkpoint/). More details about save and store models is provided [here](https://tensorflow.rstudio.com/tutorials/beginners/basic-ml/tutorial_save_and_restore/).
+
+```{r}
+# store and use only the best model
+cp_path <- paste("./Networks/model_p2")
+
+cp_callback <- callback_model_checkpoint(
+    filepath = cp_path,
+    monitor = "val_loss",
+    save_weights_only = TRUE,
+    save_best_only = TRUE,
+    verbose = 0
+)
+```
+
+```{r}
+fit_p2 <- model_p2 %>%
+  fit(
+    list(XX), list(YY),
+    validation_split = validation_split,
+    epochs = epochs,
+    batch_size = batch_size,
+    callbacks = list(cp_callback),
+    verbose = verbose
+  )
+```
+
+Let us illustrate the decrease of loss during the gradient descent algorithm. We provide two charts below
+* First one: Depending on the argument validation_split you see one curve or two curves (training and validation).
+* Second one: Illustrated the optimal model (which is stored above)
+
+The plots help to determine the optimal number of epochs.
+
+```{r}
+plot(fit_p2)
+```
+
+```{r}
+keras_plot_loss_min(fit_p2, seed)
+```
+
+```{r}
+load_model_weights_hdf5(model_p2, cp_path)
+```
+
+### Validation
+
+```{r}
+# calculating the predictions
+learn$fitshp2 <- as.vector(model_p2 %>% predict(list(XX)))
+test$fitshp2 <- as.vector(model_p2 %>% predict(list(TT)))
+
+# average in-sample and out-of-sample losses (in 10^(0))
+sprintf("Gamma deviance shallow network (train): %s", round(gamma_loss(learn$Claim, learn$fitshp2), 4))
+sprintf("Gamma deviance shallow network (test): %s", round(gamma_loss(test$Claim, test$fitshp2), 4))
+
+# average claims size
+sprintf("Average size (test): %s", round(mean(test$fitshp2), 1))
+```
+
+```{r}
+df_cmp %<>% bind_rows(
+  data.frame(model = "Plain-vanilla p2 (gamma)",
+             learn_p2 = round(gamma_loss(learn$Claim, learn$fitshp2), 4),
+             learn_pp = round(p_loss(learn$Claim, learn$fitshp2, p) * 10, 4),
+             learn_p3 = round(ig_loss(learn$Claim, learn$fitshp2) * 1000, 4),
+             test_p2 = round(gamma_loss(test$Claim, test$fitshp2), 4),
+             test_pp = round(p_loss(test$Claim, test$fitshp2, p) * 10, 4),
+             test_p3 = round(ig_loss(test$Claim, test$fitshp2) * 1000, 4),
+             avg_size = round(mean(test$fitshp2), 0)
+  ))
+df_cmp
+```
+
+### Calibration
+
+```{r}
+# Age
+plt1 <- plot_size(test, "Age", "Claim size by Age", "shp2", "fitshp2")
+# Gender
+plt2 <- plot_size(test, "Gender", "Claim size by Gender", "shp2", "fitshp2")
+# AccMonth
+plt3 <- plot_size(test, "AccMonth", "Claim size by AccMonth", "shp2", "fitshp2")
+# AccYear
+plt4 <- plot_size(test, "AccYear", "Claim size by AccYear", "shp2", "fitshp2")
+
+grid.arrange(plt1, plt2, plt3, plt4)
+```
+
+Is worthwhile to remark that the fit is quite close to the observations and that the neural networks smooths out some jumps in the observations which is in line with expectations.
+
+Below, we do not provide the generally valid comments again below, only if there are specific comments to the model.
+
+## $2<p<3$ Neural Network
+
+### Definition
+
+```{r}
+Design  <- layer_input(shape = c(qqq[1]), dtype = 'float32', name = 'design')
+
+Output <- Design %>%    
+    layer_dense(units=qqq[2], activation='tanh', name='layer1') %>%
+    layer_dense(units=qqq[3], activation='tanh', name='layer2') %>%
+    layer_dense(units=qqq[4], activation='tanh', name='layer3') %>%
+    layer_dense(units=1, activation='exponential', name='output', 
+                weights=list(array(0, dim=c(qqq[4],1)), array(log_size_hom, dim=c(1))))
+
+model_pp <- keras_model(inputs = list(Design), outputs = c(Output))
+```
+
+### Compilation
+
+```{r}
+model_pp %>% compile(
+    loss = k_p_loss,
+    optimizer = 'nadam'
+)
+
+summary(model_pp)
+```
+
+### Fitting
+
+```{r}
+# set hyperparameters
+epochs <- 100
+batch_size <- 5000
+validation_split <- 0.2 # set to >0 to see train/validation loss in plot(fit)
+verbose <- 1
+```
+
+```{r}
+# store and use only the best model
+cp_path <- paste("./Networks/model_pp")
+
+cp_callback <- callback_model_checkpoint(
+    filepath = cp_path,
+    monitor = "val_loss",
+    save_weights_only = TRUE,
+    save_best_only = TRUE,
+    verbose = 0
+)
+```
+
+```{r}
+fit_pp <- model_pp %>% fit(
+    list(XX), list(YY),
+    validation_split = validation_split,
+    epochs = epochs,
+    batch_size = batch_size,
+    callbacks = list(cp_callback),  
+    verbose = verbose
+)
+```
+
+```{r}
+plot(fit_pp)
+```
+
+```{r}
+keras_plot_loss_min(fit_pp, seed)
+```
+
+```{r}
+load_model_weights_hdf5(model_pp, cp_path)
+```
+
+### Validation
+
+```{r}
+# calculating the predictions
+learn$fitshpp <- as.vector(model_pp %>% predict(list(XX)))
+test$fitshpp <- as.vector(model_pp %>% predict(list(TT)))
+
+# average in-sample and out-of-sample losses (in 10^(0))
+sprintf("p-loss deviance shallow network (train): %s", round(p_loss(learn$Claim, learn$fitshpp, p), 4))
+sprintf("p-loss deviance shallow network (test): %s", round(p_loss(test$Claim, test$fitshpp, p), 4))
+
+# average claims size
+sprintf("Average size (test): %s", round(mean(test$fitshpp), 1))
+```
+
+```{r}
+df_cmp %<>% bind_rows(
+  data.frame(model = paste0("Plain-vanilla pp (p=", p,")"),
+             learn_p2 = round(gamma_loss(learn$Claim, learn$fitshpp), 4),
+             learn_pp = round(p_loss(learn$Claim, learn$fitshpp, p) * 10, 4),
+             learn_p3 = round(ig_loss(learn$Claim, learn$fitshpp) * 1000, 4),
+             test_p2 = round(gamma_loss(test$Claim, test$fitshpp), 4),
+             test_pp = round(p_loss(test$Claim, test$fitshpp, p) * 10, 4),
+             test_p3 = round(ig_loss(test$Claim, test$fitshpp) * 1000, 4),
+             avg_size = round(mean(test$fitshpp), 0)
+  ))
+df_cmp
+```
+
+### Calibration
+
+```{r}
+# Age
+plt1 <- plot_size(test, "Age", "Claim size by Age", "shpp", "fitshpp")
+# Gender
+plt2 <- plot_size(test, "Gender", "Claim size by Gender", "shpp", "fitshpp")
+# AccMonth
+plt3 <- plot_size(test, "AccMonth", "Claim size by AccMonth", "shpp", "fitshpp")
+# AccYear
+plt4 <- plot_size(test, "AccYear", "Claim size by AccYear", "shpp", "fitshpp")
+
+grid.arrange(plt1, plt2, plt3, plt4)
+```
+
+## Plain-vanilla Inverse Gaussian Neural Network (p=3)
+
+### Definition
+
+```{r}
+Design  <- layer_input(shape = c(qqq[1]), dtype = 'float32', name = 'design')
+
+Output <- Design %>%    
+    layer_dense(units=qqq[2], activation='tanh', name='layer1') %>%
+    layer_dense(units=qqq[3], activation='tanh', name='layer2') %>%
+    layer_dense(units=qqq[4], activation='tanh', name='layer3') %>%
+    layer_dense(units=1, activation='exponential', name='output', 
+                weights=list(array(0, dim=c(qqq[4],1)), array(log_size_hom, dim=c(1))))
+
+model_p3 <- keras_model(inputs = list(Design), outputs = c(Output))
+```
+
+### Compilation
+
+```{r}
+model_p3 %>% compile(
+    loss = k_ig_loss,
+    optimizer = 'nadam'
+)
+
+summary(model_p3)
+```
+
+### Fitting
+
+```{r}
+# set hyperparameters
+epochs <- 100
+batch_size <- 5000
+validation_split <- 0.2 # set to >0 to see train/validation loss in plot(fit)
+verbose <- 1
+```
+
+```{r}
+# store and use only the best model
+cp_path <- paste("./Networks/model_p3")
+
+cp_callback <- callback_model_checkpoint(
+    filepath = cp_path,
+    monitor = "val_loss",
+    save_weights_only = TRUE,
+    save_best_only = TRUE,
+    verbose = 0
+)
+```
+
+```{r}
+fit_p3 <- model_p3 %>% fit(
+    list(XX), list(YY),
+    validation_split = validation_split,
+    epochs = epochs,
+    batch_size = batch_size,
+    callbacks = list(cp_callback),
+    verbose = verbose
+)
+```
+
+```{r}
+plot(fit_p3)
+```
+
+```{r}
+keras_plot_loss_min(fit_p3, seed)
+```
+
+```{r}
+load_model_weights_hdf5(model_p3, cp_path)
+```
+
+### Validation
+
+```{r}
+# calculating the predictions
+learn$fitshp3 <- as.vector(model_p3 %>% predict(list(XX)))
+test$fitshp3 <- as.vector(model_p3 %>% predict(list(TT)))
+
+# average in-sample and out-of-sample losses (in 10^(0))
+sprintf("IG deviance shallow network (train): %s", round(ig_loss(learn$Claim, learn$fitshp3), 4))
+sprintf("IG deviance shallow network (test): %s", round(ig_loss(test$Claim, test$fitshp3), 4))
+
+# average claims size
+sprintf("Average size (test): %s", round(mean(test$fitshp3), 1))
+```
+
+```{r}
+df_cmp %<>% bind_rows(
+  data.frame(model = "Plain-vanilla p3 (inverse gaussian)",
+             learn_p2 = round(gamma_loss(learn$Claim, learn$fitshp3), 4),
+             learn_pp = round(p_loss(learn$Claim, learn$fitshp3, p) * 10, 4),
+             learn_p3 = round(ig_loss(learn$Claim, learn$fitshp3) * 1000, 4),
+             test_p2 = round(gamma_loss(test$Claim, test$fitshp3), 4),
+             test_pp = round(p_loss(test$Claim, test$fitshp3, p) * 10, 4),
+             test_p3 = round(ig_loss(test$Claim, test$fitshp3) * 1000, 4),
+             avg_size = round(mean(test$fitshp3), 0)
+  ))
+df_cmp
+```
+
+### Calibration
+
+```{r}
+# Age
+plt1 <- plot_size(test, "Age", "Claim size by Age", "shp3", "fitshp3")
+# Gender
+plt2 <- plot_size(test, "Gender", "Claim size by Gender", "shp3", "fitshp3")
+# AccMonth
+plt3 <- plot_size(test, "AccMonth", "Claim size by AccMonth", "shp3", "fitshp3")
+# AccYear
+plt4 <- plot_size(test, "AccYear", "Claim size by AccYear", "shp3", "fitshp3")
+
+grid.arrange(plt1, plt2, plt3, plt4)
+```
+
+## Conclusions
+
+The results of the various plain-vanilla neural network models are as follows.
+
+```{r}
+df_cmp
+```
+
+We can draw the following conclusions:
+* Fitting these networks takes in average ~30 epochs, thus, fitting is very fast here.
+* We give preference to the gamma model $p = 2$. However, these solutions would need further analysis to perform a thorough model selection, e.g., one can study Tukey{Anscombe plots, dispersion parameters, etc. We refrain from doing so because this is not the main purpose of this notebook.
+* We remark that the inverse Gaussian model does not have the lowest in-sample loss on $L_{p=3}$. This seems counter-intuitive, but it is caused by the fact that we exercise early stopping. In fact, the inverse Gaussian model is more sensitive in fitting and, typically, this results in an earlier stopping time. Here, it uses less than 30 epochs, whereas the other two cases use more than 30 epochs. In general, the inverse Gaussian model is more difficult to fit.
+
+**Exercise:** Compare the number of epochs to the number of epochs in the Frnech Motor Third Party Liability tutorials and notebooks.
+
+# Theory: LocalGLMnet
+
+The FFN network architectures of the table above often provide good predictive power, however, they are neither easily interpretable nor do they allow for variable selection. I.e., we cannot answer the question whether we should keep, say, variable HoursWorkedPerWeek in the model or not. For this reason we present the LocalGLMnet which allows us to make such decisions.
+
+Below some extracts from the tutorial [here](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3900350).
+
+![8_LocalGLMnet](Figure_theoryLGN1.PNG)
+
+![8_LocalGLMnet](Figure_theoryLGN2.PNG)
+
+# Model(s) 2: LocalGLMnet
+
+We proceed completely analogously to the previous chapter and fit a LocalGLMnet to the accident insurance data. As depth of the LocalGLMnet we choose $d = 4$ having $(q_1, q_2, q_3, q_4) = (20, 15, 10, 16)$ neurons in the FFN layers. Note that $q_4 = q_0 = q = 16$ corresponds to the input dimension. We choose hyperbolic tangent activation function for $\phi_m$, $1 \le m \le d - 1$, the linear function $\phi_d(x) = x$, and log-link for $g$. The rest is done completely analogously to the previous chapter, namely, we fit this LocalGLMnet architecture using deviance loss functions $L_p$ with $p = 2, 2.5, 3$.
+The explicit LocalGLMnet architecture is shown in Listing 5 in the appendix, and the results are presented in the tables below.
+
+## Common neural network specifications
+
+```{r}
+# Size of input for neural networks
+q0 <- length(col_features)
+qqq <- c(q0, c(20, 15, 10), 1)
+
+sprintf("Neural network with K=3 hidden layer")
+sprintf("Input feature dimension: q0 = %s", q0)
+sprintf("Number of hidden neurons first layer: q1 = %s", qqq[2])
+sprintf("Number of hidden neurons second layer: q2 = %s", qqq[3])
+sprintf("Number of hidden neurons third layer: q3 = %s", qqq[4])
+sprintf("Number of hidden neurons third layer: q4 = %s", qqq[1])
+sprintf("Output dimension: %s", qqq[5])
+```
+
+Below we define the response, learning and testing matrix required as input to the `keras` functions.
+
+```{r}
+# matrices
+YY <- as.matrix(as.numeric(learn$Claim))
+XX <- as.matrix(learn[, col_features])
+TT <- as.matrix(test[, col_features])
+```
+
+```{r}
+# neural network structure
+Design  <- layer_input(shape = c(qqq[1]), dtype = 'float32', name = 'design') 
+
+Attention <- Design %>%    
+    layer_dense(units=qqq[2], activation='tanh', name='layer1') %>%
+    layer_dense(units=qqq[3], activation='tanh', name='layer2') %>%
+    layer_dense(units=qqq[4], activation='tanh', name='layer3') %>%
+    layer_dense(units=qqq[1], activation='linear', name='attention')
+
+Output <- list(Design, Attention) %>% layer_dot(name='LocalGLM', axes=1) %>% 
+    layer_dense(
+      units=1, activation='exponential', name='output',
+      weights=list(array(0, dim=c(1,1)), array(log_size_hom, dim=c(1)))
+    )
+```
+
+## LocalGLMnet Gamma (p=2)
+
+### Definition
+
+```{r}
+model_lgn_p2 <- keras_model(inputs = list(Design), outputs = c(Output))
+```
+
+### Compilation
+
+```{r}
+model_lgn_p2 %>% compile(
+    loss = k_gamma_loss,
+    optimizer = 'nadam'
+)
+summary(model_lgn_p2)
+```
+
+### Fitting
+
+```{r}
+# set hyperparameters
+epochs <- 100
+batch_size <- 5000
+validation_split <- 0.2 # set to >0 to see train/validation loss in plot(fit)
+verbose <- 1
+```
+
+```{r}
+# store and use only the best model
+cp_path <- paste("./Networks/model_lgn_p2")
+
+cp_callback <- callback_model_checkpoint(
+    filepath = cp_path,
+    monitor = "val_loss",
+    save_weights_only = TRUE,
+    save_best_only = TRUE,
+    verbose = 0
+)
+```
+
+```{r}
+fit_lgn_p2 <- model_lgn_p2 %>% fit(
+    list(XX), list(YY),
+    validation_split = validation_split,
+    epochs = epochs,
+    batch_size = batch_size,
+    callbacks = list(cp_callback),
+    verbose = verbose
+)
+```
+
+```{r}
+plot(fit_lgn_p2)
+```
+
+```{r}
+keras_plot_loss_min(fit_lgn_p2, seed)
+```
+
+```{r}
+load_model_weights_hdf5(model_lgn_p2, cp_path)
+```
+
+### Validation
+
+```{r}
+# calculating the predictions
+learn$fitlgnp2 <- as.vector(model_lgn_p2 %>% predict(list(XX)))
+test$fitlgnp2 <- as.vector(model_lgn_p2 %>% predict(list(TT)))
+
+# average in-sample and out-of-sample losses (in 10^(0))
+sprintf("Gamma deviance shallow network (train): %s", round(gamma_loss(learn$Claim, learn$fitlgnp2), 4))
+sprintf("Gamma deviance shallow network (test): %s", round(gamma_loss(test$Claim, test$fitlgnp2), 4))
+
+# average claims size
+sprintf("Average size (test): %s", round(mean(test$fitlgnp2), 1))
+```
+
+```{r}
+df_cmp %<>% bind_rows(
+  data.frame(model = "LocalGLMnet p2 (gamma)",
+             learn_p2 = round(gamma_loss(learn$Claim, learn$fitlgnp2), 4),
+             learn_pp = round(p_loss(learn$Claim, learn$fitlgnp2, p) * 10, 4),
+             learn_p3 = round(ig_loss(learn$Claim, learn$fitlgnp2) * 1000, 4),
+             test_p2 = round(gamma_loss(test$Claim, test$fitlgnp2), 4),
+             test_pp = round(p_loss(test$Claim, test$fitlgnp2, p) * 10, 4),
+             test_p3 = round(ig_loss(test$Claim, test$fitlgnp2) * 1000, 4),
+             avg_size = round(mean(test$fitlgnp2), 0)
+  ))
+df_cmp
+```
+
+### Calibration
+
+```{r}
+# Age
+plt1 <- plot_size(test, "Age", "Claim size by Age", "lgnp2", "fitlgnp2")
+# Gender
+plt2 <- plot_size(test, "Gender", "Claim size by Gender", "lgnp2", "fitlgnp2")
+# AccMonth
+plt3 <- plot_size(test, "AccMonth", "Claim size by AccMonth", "lgnp2", "fitlgnp2")
+# AccYear
+plt4 <- plot_size(test, "AccYear", "Claim size by AccYear", "lgnp2", "fitlgnp2")
+
+grid.arrange(plt1, plt2, plt3, plt4)
+```
+
+## LocalGlmnet $2<p<3$
+
+### Definition
+
+```{r}
+model_lgn_pp <- keras_model(inputs = list(Design), outputs = c(Output))
+```
+
+### Compilation
+
+```{r}
+model_lgn_pp %>% compile(
+    loss = k_p_loss,
+    optimizer = 'nadam'
+)
+summary(model_lgn_pp)
+```
+
+### Fitting
+
+```{r}
+# set hyperparameters
+epochs <- 100
+batch_size <- 5000
+validation_split <- 0.2 # set to >0 to see train/validation loss in plot(fit)
+verbose <- 1
+```
+
+```{r}
+# store and use only the best model
+cp_path <- paste("./Networks/model_lgn_pp")
+
+cp_callback <- callback_model_checkpoint(
+    filepath = cp_path,
+    monitor = "val_loss",
+    save_weights_only = TRUE,
+    save_best_only = TRUE,
+    verbose = 0
+)
+```
+
+```{r}
+fit_lgn_pp <- model_lgn_pp %>% fit(
+    list(XX), list(YY),
+    validation_split = validation_split,
+    epochs = epochs,
+    batch_size = batch_size,
+    callbacks = list(cp_callback),
+    verbose = verbose
+)
+```
+
+```{r}
+plot(fit_lgn_pp)
+```
+
+```{r}
+keras_plot_loss_min(fit_lgn_pp, seed)
+```
+
+```{r}
+load_model_weights_hdf5(model_lgn_pp, cp_path)
+```
+
+### Validation
+
+```{r}
+# calculating the predictions
+learn$fitlgnpp <- as.vector(model_pp %>% predict(list(XX)))
+test$fitlgnpp <- as.vector(model_pp %>% predict(list(TT)))
+
+# average in-sample and out-of-sample losses (in 10^(0))
+sprintf("p-loss deviance shallow network (train): %s", round(p_loss(learn$Claim, learn$fitlgnpp, p), 4))
+sprintf("p-loss deviance shallow network (test): %s", round(p_loss(test$Claim, test$fitlgnpp, p), 4))
+
+# average claims size
+sprintf("Average size (test): %s", round(mean(test$fitlgnpp), 1))
+```
+
+```{r}
+df_cmp %<>% bind_rows(
+  data.frame(model = "LocalGLMnet pp (p=2.5)",
+             learn_p2 = round(gamma_loss(learn$Claim, learn$fitlgnpp), 4),
+             learn_pp = round(p_loss(learn$Claim, learn$fitlgnpp, p) * 10, 4),
+             learn_p3 = round(ig_loss(learn$Claim, learn$fitlgnpp) * 1000, 4),
+             test_p2 = round(gamma_loss(test$Claim, test$fitlgnpp), 4),
+             test_pp = round(p_loss(test$Claim, test$fitlgnpp, p) * 10, 4),
+             test_p3 = round(ig_loss(test$Claim, test$fitlgnpp) * 1000, 4),
+             avg_size = round(mean(test$fitlgnpp), 0)
+  ))
+df_cmp
+```
+
+### Calibration
+
+```{r}
+# Age
+plt1 <- plot_size(test, "Age", "Claim size by Age", "lgnpp", "fitlgnpp")
+# Gender
+plt2 <- plot_size(test, "Gender", "Claim size by Gender", "lgnpp", "fitlgnpp")
+# AccMonth
+plt3 <- plot_size(test, "AccMonth", "Claim size by AccMonth", "lgnpp", "fitlgnpp")
+# AccYear
+plt4 <- plot_size(test, "AccYear", "Claim size by AccYear", "lgnpp", "fitlgnpp")
+
+grid.arrange(plt1, plt2, plt3, plt4)
+```
+
+## LocalGLMnet Inverse Gaussian (p=3)
+
+### Definition
+
+```{r}
+model_lgn_p3 <- keras_model(inputs = list(Design), outputs = c(Output))
+```
+
+### Compilation
+
+```{r}
+model_lgn_p3 %>% compile(
+    loss = k_ig_loss,
+    optimizer = 'nadam'
+)
+summary(model_lgn_p3)
+```
+
+### Fitting
+
+```{r}
+# set hyperparameters
+epochs <- 100
+batch_size <- 5000
+validation_split <- 0.2 # set to >0 to see train/validation loss in plot(fit)
+verbose <- 1
+```
+
+```{r}
+# store and use only the best model
+cp_path <- paste("./Networks/model_lgn_p3")
+
+cp_callback <- callback_model_checkpoint(
+    filepath = cp_path,
+    monitor = "val_loss",
+    save_weights_only = TRUE,
+    save_best_only = TRUE,
+    verbose = 0
+)
+```
+
+```{r}
+fit_lgn_p3 <- model_lgn_p3 %>% fit(
+    list(XX), list(YY),
+    validation_split = validation_split,
+    epochs = epochs,
+    batch_size = batch_size,
+    callbacks = list(cp_callback),
+    verbose = verbose
+)
+```
+
+```{r}
+plot(fit_lgn_p3)
+```
+
+```{r}
+keras_plot_loss_min(fit_lgn_p3, seed)
+```
+
+```{r}
+load_model_weights_hdf5(model_lgn_p3, cp_path)
+```
+
+### Validation
+
+```{r}
+# calculating the predictions
+learn$fitlgnp3 <- as.vector(model_lgn_p3 %>% predict(list(XX)))
+test$fitlgnp3 <- as.vector(model_lgn_p3 %>% predict(list(TT)))
+
+# average in-sample and out-of-sample losses (in 10^(0))
+sprintf("IG deviance shallow network (train): %s", round(ig_loss(learn$Claim, learn$fitlgnp3), 4))
+sprintf("IG deviance shallow network (test): %s", round(ig_loss(test$Claim, test$fitlgnp3), 4))
+
+# average claims size
+sprintf("Average size (test): %s", round(mean(test$fitlgnp3), 1))
+```
+
+```{r}
+df_cmp %<>% bind_rows(
+  data.frame(model = "LocalGLMnet p3 (inverse gaussian)",
+             learn_p2 = round(gamma_loss(learn$Claim, learn$fitlgnp3), 4),
+             learn_pp = round(p_loss(learn$Claim, learn$fitlgnp3, p) * 10, 4),
+             learn_p3 = round(ig_loss(learn$Claim, learn$fitlgnp3) * 1000, 4),
+             test_p2 = round(gamma_loss(test$Claim, test$fitlgnp3), 4),
+             test_pp = round(p_loss(test$Claim, test$fitlgnp3, p) * 10, 4),
+             test_p3 = round(ig_loss(test$Claim, test$fitlgnp3) * 1000, 4),
+             avg_size = round(mean(test$fitlgnp3), 0)
+  ))
+df_cmp
+```
+
+### Calibration
+
+```{r}
+# Age
+plt1 <- plot_size(test, "Age", "Claim size by Age", "lgnp3", "fitlgnp3")
+# Gender
+plt2 <- plot_size(test, "Gender", "Claim size by Gender", "lgnp3", "fitlgnp3")
+# AccMonth
+plt3 <- plot_size(test, "AccMonth", "Claim size by AccMonth", "lgnp3", "fitlgnp3")
+# AccYear
+plt4 <- plot_size(test, "AccYear", "Claim size by AccYear", "lgnp3", "fitlgnp3")
+
+grid.arrange(plt1, plt2, plt3, plt4, top="LocalGLMnet Inverse Gaussian")
+```
+
+# Results of plain-vanilla and LocalGLMnet
+
+The results of the plain-vanilla and LocalGLNnet models are as follows.
+
+```{r}
+df_cmp
+```
+
+We can draw the following conclusions:
+* We again prefer the gamma model over the other power variance parameter models.
+* Moreover, for this particular data set the LocalGLMnet outperforms the deep FFN network. However, this is not the crucial point of introducing the LocalGLMnet, but the LocalGLMnet leads to interpretable predictions and it allows for variable selection as we are going to demonstrate in the next sections.
+
+# LocalGLMnet: Interpretations
+
+In the following chapters, we are going to explore the various interpretations of the regression functions, which is the beauty and main benefit of LocalGLMnet!
+
+![8_LocalGLMnet](Figure_interpretations.PNG)
+
+# LocalGLMnet: Variable selection and variable importance
+
+We are going to examine points (1) and (2) from the previous extract.
+
+![8_LocalGLMnet](Figure_varSel.PNG)
+
+## Data Preparation
+
+Needs to be done as the two random features are added.
+
+```{r}
+# used/selected features
+col_features <- c("AgeNN","GenderNN","DependentChildrenNN","DependentsOtherNN",
+                  "WeeklyPayNN","PartTimeFullTimeNN","HoursWorkedPerWeekNN",
+                  "DaysWorkedPerWeekNN","AccYearNN","AccMonthNN","AccWeekdayNN",
+                  "AccTimeNN","RepDelayNN","RandUN","RandNN","Marital1","Marital2","Marital3") 
+col_names <- c("Age","Gender","DependentChildren","DependentsOther","WeeklyPay",
+               "PartTimeFullTime","HoursWorkedPerWeek","DaysWorkedPerWeek",
+               "AccYear","AccMonth","AccWeekday","AccTime","RepDelay","RandUN",
+               "RandNN","Marital1","Marital2","Marital3")
+```
+
+```{r}
+# Size of input for neural networks
+q0 <- length(col_features)
+qqq <- c(q0, c(20, 15, 10), 1)
+
+sprintf("Neural network with K=3 hidden layer")
+sprintf("Input feature dimension: q0 = %s", q0)
+sprintf("Number of hidden neurons first layer: q1 = %s", qqq[2])
+sprintf("Number of hidden neurons second layer: q2 = %s", qqq[3])
+sprintf("Number of hidden neurons third layer: q3 = %s", qqq[4])
+sprintf("Number of hidden neurons third layer: q4 = %s", qqq[1])
+sprintf("Output dimension: %s", qqq[5])
+```
+
+```{r}
+# matrices
+YY <- as.matrix(as.numeric(learn$Claim))
+XX <- as.matrix(learn[, col_features]) 
+TT <- as.matrix(test[, col_features])
+```
+
+As $p=2$ is our preferred model, we need to fit it including the two random variables.
+
+## Fit LocalGLMnet Gamma (p=2)
+
+### Definition
+
+```{r}
+# neural network structure
+Design <- layer_input(shape = c(qqq[1]), dtype = 'float32', name = 'design') 
+
+Attention <- Design %>%    
+    layer_dense(units=qqq[2], activation='tanh', name='layer1') %>%
+    layer_dense(units=qqq[3], activation='tanh', name='layer2') %>%
+    layer_dense(units=qqq[4], activation='tanh', name='layer3') %>%
+    layer_dense(units=qqq[1], activation='linear', name='attention')
+
+Output <- list(Design, Attention) %>% layer_dot(name='LocalGLM', axes=1) %>% 
+    layer_dense(
+      units=1, activation='exponential', name='output', 
+      weights=list(array(0, dim=c(1,1)), array(log_size_hom, dim=c(1))))
+```
+
+```{r}
+model_var <- keras_model(inputs = list(Design), outputs = c(Output))
+```
+
+### Compilation
+
+```{r}
+model_var %>% compile(
+    loss = k_gamma_loss,
+    optimizer = 'nadam'
+)
+summary(model_var)
+```
+
+### Fitting
+
+```{r}
+# set hyperparameters
+epochs <- 100
+batch_size <- 5000
+validation_split <- 0.2 # set to >0 to see train/validation loss in plot(fit)
+verbose <- 1
+```
+
+```{r}
+# store and use only the best model
+cp_path <- paste("./Networks/model_var")
+
+cp_callback <- callback_model_checkpoint(
+    filepath = cp_path,
+    monitor = "val_loss",
+    save_weights_only = TRUE,
+    save_best_only = TRUE,
+    verbose = 0
+)
+```
+
+```{r}
+fit_var <- model_var %>% fit(
+    list(XX), list(YY),
+    validation_split = validation_split,
+    epochs = epochs,
+    batch_size = batch_size,
+    callbacks = list(cp_callback),
+    verbose = verbose
+)
+```
+
+```{r}
+plot(fit_var)
+```
+
+```{r}
+keras_plot_loss_min(fit_var, seed)
+```
+
+```{r}
+load_model_weights_hdf5(model_var, cp_path)
+```
+
+### Validation
+
+```{r}
+# calculating the predictions
+learn$fitvar <- as.vector(model_var %>% predict(list(XX)))
+test$fitvar <- as.vector(model_var %>% predict(list(TT)))
+
+# average in-sample and out-of-sample losses (in 10^(0))
+sprintf("Gamma deviance: %s", round(gamma_loss(learn$Claim, learn$fitvar), 4))
+sprintf("Gamma deviance: %s", round(gamma_loss(test$Claim, test$fitvar), 4))
+
+# average claims size
+sprintf("Average claim size (test): %s", round(mean(test$fitvar), 1))
+```
+
+$\Rightarrow$ The inclusion of the two additional (unrelated) components might slightly worsens the predictive performance. The reason is that these additional components give a higher over-fitting potential, and, typically, we stop the SGD algorithm more early.
+
+## Extract the regression attentions $\hat{\beta_j}(x_i)$
+
+We extract the estimated covariate dependent regression attentions $\hat{\beta_j}(x_i)$ from the model `model_var` fitted previously. With that, we are able to test the hypothesis $H_0: \beta_j(x) = 0$, as formulated above, based on the estimated regression attention values $\hat{\beta_j}(x_i)$. It allows to perform variable selection.
+
+To the best of our knowledge, the extraction of the regression attentions values $\hat{\beta_j}(x_i)$ needs to be done "manually" in the sense that no single function is (yet) available to extract them. Main steps:
+* Predict the outcome of the corresponding layer in the network
+* Adjustment with the corresponding weight
+
+First, we need to determine the (hidden) layer which provides the regression attentions $\hat{\beta_j}(x_i)$, we do not need the outcome, see the formula of the LocalGLMnet above.
+
+```{r}
+# select submodel such that the prediction provides the unweighted regression attentions
+zz <- keras_model(inputs = model_var$input, outputs = get_layer(model_var, 'attention')$output)
+summary(zz)
+```
+
+```{r}
+# Calculate the regression attentions for model zz on the test set
+beta_x <- data.frame(zz %>% predict(list(TT)))
+names(beta_x) <- paste0("Beta", col_names)
+```
+
+Second, we need to adjust the predictions with the corresponding layer wieght to get the $\hat{\beta_j}(x_i)$.
+
+Below an illustration which helps to understand the `get_weights` functions.
+
+![8_LocalGLMnet](Figure_get_weights.PNG)
+
+```{r}
+# multiply with the corresponding weight
+ww <- get_weights(model_var)
+beta_x <- beta_x * as.numeric(ww[[9]])
+str(beta_x)
+```
+
+`beta_x` are now the regression attentions $\hat{\beta_j}(x_i)$ of the test set $\mathcal{T}$.
+
+The regression attentions $\hat{\beta_j}(x_i)$ on the learning set $\mathcal{L}$.
+
+```{r}
+# attention beta(x) on the learning set
+beta_xL <- data.frame(zz %>% predict(list(XX)))
+names(beta_xL) <- paste0("Beta", col_names)
+beta_xL <- beta_xL * as.numeric(ww[[9]])
+```
+
+## Empirical hypothesis figures
+
+For the empirical hypothesis testing,
+* We extract the estimated regression attentions $\hat{\beta}_{q+1}(x_i)$ and $\hat{\beta}_{q+2}(x_i)$ of the randomly added variables, and we calculate their empirical means and their empirical standard deviations
+* We calculate the 0.1% rejection region
+* We calculate the empirical coverage ratio for every feature
+
+```{r}
+# mean and std.dev. of additional (randomly generated) components q+1 and q+2
+mean_rand <- c(mean(beta_xL$BetaRandUN), mean(beta_xL$BetaRandNN))
+sd_rand <- c(sd(beta_xL$BetaRandUN), sd(beta_xL$BetaRandNN))
+sprintf("The means of the random variables regression attentions are:  %s", paste(round(mean_rand, 4), collapse = "  "))
+sprintf("The stdevs of the random variables regression attentions are:  %s", paste(round(sd_rand, 4), collapse = "  "))
+```
+
+```{r}
+# 0.1% rejection region
+quant_rand <- mean(sd_rand) * abs(qnorm(0.0005))
+cat("The 0.1% rejection region is 0 +/-", quant_rand)
+```
+
+```{r}
+# in-sample coverage ratio for all features
+num_names <- 1:(length(col_names)-3)
+II <- data.frame(array(NA, c(1, length(num_names))))
+names(II) <- col_names[num_names] 
+for (k1 in 1:length(num_names)) {
+  II[1, k1] <- 1 - (sum(as.integer(-beta_xL[, num_names[k1]] > quant_rand)) +
+                    sum(as.integer(beta_xL[, num_names[k1]] > quant_rand))) / nrow(beta_xL)
+}
+round(II, 4)
+```
+
+## Plot the regression attentions
+
+```{r}
+## merge covariates x with beta(x) on the test set
+beta_x <- cbind(TT, beta_x)
+```
+
+We show the estimated regression attentions for all continuous and binary components $j$ for 5000 randomly selected claims (we do not display all claims to not overload the plots).
+
+```{r}
+## select at random 5000 claims to not overload plots
+nsample <- 5000
+set.seed(seed)
+idx <- sample(x = 1:nrow(test), size = nsample)
+```
+
+```{r}
+# data for plotting
+beta_x_smp <- beta_x[idx, ]
+test_smp <- test[idx, ]
+test_smp$Gender <- as.numeric(test_smp$Gender)
+test_smp$PartTimeFullTime <- as.numeric(test_smp$PartTimeFullTime)
+```
+
+Below we show the regression attentions of 50000 randomly selected covariates. The shaded green area shows the interval $\mathcal{I}_{99:9\%}$, and the text in the subtitle shows the coverage ratio (CR) of this interval $\mathcal{I}_{99:9\%}$. The y-scale is identical in all plots (the orange lines are at$+/- 0.25$ for orientation purposes), and on the x-scale we have covariate components $x_j$.
+
+```{r}
+# Plotting for all continuous and binary features
+for (ll in 1:length(num_names)) {
+    kk <- num_names[ll]
+    dat_plt <- data.frame(var = test_smp[, col_names[ll]],
+                          bx = beta_x_smp[, kk + length(col_features)],
+                          col = rep("green", nsample))
+    plt <- ggplot(dat_plt, aes(x = var, y = bx)) + geom_point() + 
+              geom_hline(yintercept = 0, colour = "red", size = line_size) + 
+              geom_hline(yintercept = c(-quant_rand, quant_rand), colour = "green", size = line_size) +
+              geom_hline(yintercept = c(-1,1)/4, colour = "orange", size = line_size, linetype = "dashed") +
+              geom_rect(
+                mapping = aes(xmin = min(var), xmax = max(var), ymin = -quant_rand, ymax = quant_rand),
+                fill = dat_plt$col, alpha = 0.002
+              ) + lims(y = c(-0.75,0.75)) +
+              labs(title = paste0("Regression attention: ", col_names[ll]),
+                   subtitle = paste0("Coverage Ratio: ", paste0(round(II[, col_names[ll]] * 100, 2)), "%"),
+                   x = paste0(col_names[ll], " x"), y = "regression attention beta(x)")
+    print(plt)
+}
+```
+
+These coverage ratios are around $99.9\%$ for the covariates HoursWorkedPerWeek, DaysWorkedPerWeek and AccWeekday (besides the two purely random components). This suggests that these three terms may not be necessary in our regression model, and the remaining terms seem significant, i.e., the null hypothesis $H_0$ of setting these regression attentions to zero is rejected. We mention that HoursWorkedPerWeek and DaysWorkedPerWeek are almost fully concentrated in one single value. These terms seem to not allow to suffciently differentiate the claims.
+
+$\Rightarrow$ We have presented an empirical test for the null hypothesis $H_0 : \beta_j(x) = 0$ for a given $1 \le j \le q$. This null hypothesis can be tested using the coverage ratio of the (empirical) interval I99:9%. This test requires some care, as it based on the fitted LocalGLMnet, and if the purely
+random additional components show to much structure in the fitted model, then, for sure, the model over-fits to these components. If this bias is too large, a different seed should be chosen for SGD fitting. We also mention that this test is only useful for continuous and binary variables because the one-hot encoded categorical variables do not live on the same scale (centered and unit variance).
+
+## Variable importance plot
+
+![8_LocalGLMnet](Figure_varImp.PNG)
+
+```{r}
+# calculate variable importance
+var_imp <- abs(beta_xL[, num_names])
+
+# store as data.frame for plotting
+dat_var_imp <- data.frame(vi = colMeans(var_imp), names = col_names[1:length(num_names)])
+
+# limits from random generated variables
+dat_var_imp_limit <- dat_var_imp %>% filter(names %in% c("RandUN", "RandNN"))
+limit_rand <- max(dat_var_imp_limit$vi)
+```
+
+```{r}
+ggplot(dat_var_imp, aes(x = vi)) + geom_col(aes(y = reorder(names, vi))) +
+    geom_vline(xintercept = seq(0.1, 0.4, by = 0.1), col = "gray1", linetype = "dashed") +
+    geom_vline(xintercept = limit_rand, col = "red", size = line_size) +
+    theme(axis.text = element_text(size = 12)) +
+    labs(title = "Variable importance", x = "variable importance", y = "variable")
+```
+
+Variable importance of the continuous and binary covariates, the red vertical line gives the maximum importance of the two additional randomly generated components.
+
+The most important variables being WeeklyPay, AccYear and Age. At the other end we have the least important variables AccMonth, AccTime, HoursWorkedPerWeek and AccWeekday. Thus, compared to the coverage ratio we additionally question the significance of AccTime from the variable importance plot.
+
+$\Rightarrow$ Based on this chapter, it is appropriate to exclude certain variables from the model. Next, we will fit the reduced model and provide further insights for the covariate distribution and interactions.
+
+## Reduced model
+
+### Data preparation
+
+```{r}
+reduce <- c("AccWeekday", "HoursWorkedPerWeek", "DaysWorkedPerWeek")
+
+col_featuresR <- setdiff(col_features, c(paste0(reduce, "NN"), "RandUN", "RandNN"))
+col_namesR <- setdiff(col_names, c(reduce, "RandUN", "RandNN"))
+```
+
+```{r}
+# Size of input for neural networks
+q0 <- length(col_featuresR)
+qqq <- c(q0, c(20, 15, 10), 1)
+
+sprintf("Neural network with K=3 hidden layer")
+sprintf("Input feature dimension: q0 = %s", q0)
+sprintf("Number of hidden neurons first layer: q1 = %s", qqq[2])
+sprintf("Number of hidden neurons second layer: q2 = %s", qqq[3])
+sprintf("Number of hidden neurons third layer: q3 = %s", qqq[4])
+sprintf("Output dimension: %s", qqq[5])
+```
+
+```{r}
+# matrices
+# YY remains the same
+XX <- as.matrix(learn[, col_featuresR])
+TT <- as.matrix(test[, col_featuresR])
+```
+
+### Definition
+
+```{r}
+# neural network structure
+Design <- layer_input(shape = c(qqq[1]), dtype = 'float32', name = 'design') 
+
+Attention <- Design %>%    
+    layer_dense(units = qqq[2], activation = 'tanh', name = 'layer1') %>%
+    layer_dense(units = qqq[3], activation = 'tanh', name = 'layer2') %>%
+    layer_dense(units = qqq[4], activation = 'tanh', name = 'layer3') %>%
+    layer_dense(units = qqq[1], activation = 'linear', name = 'attention')
+
+Output <- list(Design, Attention) %>% layer_dot(name = 'LocalGLM', axes = 1) %>% 
+    layer_dense(units = 1, activation = 'exponential', name = 'output', 
+                weights = list(array(0, dim = c(1,1)), array(log_size_hom, dim = c(1))))
+```
+
+```{r}
+model_red <- keras_model(inputs = list(Design), outputs = c(Output))
+```
+
+### Compilation
+
+```{r}
+model_red %>% compile(
+    loss = k_gamma_loss,
+    optimizer = 'nadam'
+)
+summary(model_red)
+```
+
+### Fitting
+
+```{r}
+# set hyperparameters
+epochs <- 100
+batch_size <- 5000
+validation_split <- 0.2 # set to >0 to see train/validation loss in plot(fit)
+verbose <- 1
+```
+
+```{r}
+# store and use only the best model
+cp_path <- paste("./Networks/model_red")
+
+cp_callback <- callback_model_checkpoint(
+    filepath = cp_path,
+    monitor = "val_loss",
+    save_weights_only = TRUE,
+    save_best_only = TRUE,
+    verbose = 0
+)
+```
+
+```{r}
+fit_red <- model_red %>% fit(
+    list(XX), list(YY),
+    validation_split = validation_split,
+    epochs = epochs,
+    batch_size = batch_size,
+    callbacks = list(cp_callback),
+    verbose = verbose
+)
+```
+
+```{r}
+plot(fit_red)
+```
+
+```{r}
+keras_plot_loss_min(fit_red, seed)
+```
+
+```{r}
+load_model_weights_hdf5(model_red, cp_path)
+```
+
+### Validation
+
+```{r}
+# calculating the predictions
+learn$fitred <- as.vector(model_red %>% predict(list(XX)))
+test$fitred <- as.vector(model_red %>% predict(list(TT)))
+
+# average in-sample and out-of-sample losses (in 10^(0))
+sprintf("Gamma deviance: %s", round(gamma_loss(learn$Claim, learn$fitred), 4))
+sprintf("Gamma deviance: %s", round(gamma_loss(test$Claim, test$fitred), 4))
+
+# average claims size
+sprintf("Average claim size (test): %s", round(mean(test$fitred), 0))
+```
+
+# LocalGLMnet: Covariate contributions $\hat{\beta}_j(x)x_j$
+
+Next we plot covariate contributions $\hat{\beta}_j(x)x_j$, which is the attribution of the predictor to the different additive components, see formula (5.3) below.
+
+![8_LocalGLMnet](Figure_LocalGLMnet.PNG)
+
+## Extract the regression attentions $\hat{\beta_j}(x_i)$
+
+We only provide below the code, for a better understanding of the code, see the previous chapter.
+
+```{r}
+# define predicted layer and corresponding weights
+zz <- keras_model(inputs = model_red$input, outputs = get_layer(model_red, 'attention')$output)
+ww <- get_weights(model_red)
+```
+
+```{r}
+## attention weights of test samples
+beta_x <- data.frame(zz %>% predict(list(TT)))
+names(beta_x) <- paste0("Beta", col_namesR)
+beta_x <- beta_x * as.numeric(ww[[9]])
+str(beta_x)
+```
+
+## Plot the covariate contributions $\hat{\beta}_j(x)x_j$
+
+```{r}
+## merge covariates x with beta(x)
+beta_x <- cbind(TT, beta_x)
+```
+
+We show the estimated regression attentions for all continuous and binary components $j$ for 5000 randomly selected claims (we do not display all claims to not overload the plots).
+
+```{r}
+## select at random 5000 claims to not overload plots
+nsample <- 5000
+set.seed(seed)
+idx <- sample(x = 1:nrow(test), size = nsample)
+```
+
+```{r}
+# continuous, binary and categorical variables in col_namesR
+var_cont <- c(1, 5, 7, 8, 9, 10)
+var_bin <- c(2, 3, 4, 6)
+var_cat <- 11:13
+```
+
+```{r}
+# data for plotting
+beta_x_smp <- beta_x[idx, ]
+test_smp <- test[idx, ]
+```
+
+We are going to plot on the x-axis the covariates $x_{i,j}$ and on the y-axis the covariate contributions $\hat{\beta}_j(x_i)x_{i,j}$. The y-axis is the same for all covariates, and we add a spline fit. The orange line are at $\pm 0.25$ for orientation purposes
+
+**Continuous variables**
+
+```{r}
+# Plotting for all continuous features
+for (ll in 1:length(var_cont)) {
+    kk <- var_cont[ll]
+    dat_plt <- data.frame(var = test_smp[, col_namesR[kk]],
+                          bx = beta_x_smp[, kk + length(col_featuresR)] * beta_x_smp[, kk],
+                          col = rep("green", nsample))
+    plt <- ggplot(dat_plt, aes(x = var, y = bx)) + geom_point() +
+        geom_smooth(size = line_size) +
+        geom_hline(yintercept = 0, colour = "red", size = line_size) +
+        geom_hline(yintercept = c(-1, 1) / 4, colour = "orange", size = line_size, linetype = "dashed") +
+        lims(y = c(-1.25, 1.25)) +
+        labs(title = paste0("Covariate contribution: ", col_namesR[kk]),
+             x = paste0(col_namesR[kk], " x"),
+             y = "covariate contribution beta(x) * x")
+    suppressMessages(print(plt))
+}
+```
+
+$\Rightarrow$ The figures above show the covariate contributions $\hat{\beta}_j(x)x_{i,j}$ of the continuous variables Age, WeeklyPay, AccYear, AccMonth, AccTime, RepDelay. We see that claim amounts are increasing in most of these variables, and AccTime shows that claims are more expensive during nights. The AccMonth contribution is not so clear, so further investigations are needed.
+
+The blue curve shows a spline fit, and the more volatility is observed around this spline the more strong the interactions are in $\hat{\beta}_j(x_i)x_{i,j}$.
+
+**Exercise:** Do change the numbers of points shown in chart, do see some more interesting patterns?
+
+**Exercise:** The conclusion for the AccMonth variable is more involved. Have a careful look at it and try out what could be done to improve it.
+
+**Binary variables**
+
+```{r}
+# Plotting for all binary features
+for (ll in 1:length(var_bin)) {
+    kk <- var_bin[ll]
+    dat_plt <- data.frame(var = factor(test_smp[, col_namesR[kk]]),
+                          bx = beta_x_smp[, kk + length(col_featuresR)] * beta_x_smp[, kk],
+                          col = rep("green", nsample))
+    plt <- ggplot(dat_plt, aes(x = var, y = bx)) + geom_boxplot() +
+        geom_hline(yintercept = 0, colour = "red", size = line_size) +
+        geom_hline(yintercept = c(-1,1)/4, colour = "orange", size = line_size, linetype = "dashed") +
+        lims(y = c(-1.25, 1.25)) +
+        labs(title = paste0("Covariate contribution: ", col_namesR[kk]),
+             x = paste0(col_namesR[kk], " x"),
+             y = "covariate contribution beta(x) * x")
+    suppressMessages(print(plt))
+}
+```
+
+$\Rightarrow$  The figures above show the covariate contributions $\hat{\beta}_j(x_i)x_{i,j}$ of the binary variables Gender, DependentChildren, DependentsOther, PartTimeFullTime. The difference in the binary variables are clearly smaller than for the continuous ones, which is also reflected by the variable importance plot. DependentChildren and DependentsOther only has a small volume in level 1, and these levels seem mainly driven by interactions (because of the large boxes in the boxplot).
+
+**Categorical variable**
+
+```{r}
+# data preparation for plotting
+beta_xx <- cbind(test$MaritalStatus, beta_x[, 11:13] * beta_x[, 24:26])
+beta_xx$BetaMarital <- rowSums(beta_xx[, -1]) 
+beta_xx <- beta_xx[, c(1, ncol(beta_xx))]
+names(beta_xx) <- c("MaritalStatus", "BetaMarital")
+str(beta_xx)
+```
+
+```{r}
+namesCat <- "MaritalStatus"
+dat_plt <- beta_xx[idx, ]
+```
+
+```{r}
+ggplot(dat_plt, aes(x = MaritalStatus, y = BetaMarital)) + geom_boxplot() +
+     geom_hline(yintercept = 0, colour = "red", size = line_size) +
+     geom_hline(yintercept = c(-1, 1) / 4, colour = "orange", size = line_size, linetype = "dashed") +
+     lims(y = c(-1.25, 1.25)) +
+     labs(title = paste0("Covariate contribution: ", namesCat),
+          x = paste0(namesCat, " x"),
+          y = "covariate contribution beta(x) * x")
+```
+
+$\Rightarrow$ Finally, the figure above gives the covariate contributions $\hat{\beta}_j(x_i)$ of the categorical variable MaritalStatus. Note that we do not multiply with $x_{i,j}$ in this case, because these covariate components just correspond to the 0-1's from one-hot encoding. This plot now also illustrates why we do not consider dummy coding, namely, if we would use dummy coding, e.g., choosing level single (S) as reference level, then the corresponding $x_j = 0$, and we could not model interactions for this level because it would imply that $\hat{\beta}_j(x_i) = 0$, and all single persons would share the same value (being the bias estimate $\hat{\beta}_0$).
+
+# LocalGLMnet: Interactions
+
+We are going to examine point (3) of the interpretation for LocalGLMnet.
+
+![8_LocalGLMnet](Figure_interactions.PNG)
+
+We analyze the interaction terms by studying the sensitivities $\partial_{x_k} \beta_j(x)$ given in (5.5). A zero term  $\partial_{x_k} \beta_j(x) \approx 0$ for $k = j$ supports linearity, and $\partial_{x_k} \beta_j(x) \neq 0$ for $k \neq j$ means that $x_k$ and $x_j$ interact.
+
+The code shown below to plot the interactions is not intuitive and straightforward. You can skip the code details and focus on the understanding of the charts and the correspondings conclusions to be drawn.
+
+### Set parameters
+
+```{r}
+# limits for plotting (y-axis)
+ax_limit <- c(-.6, .6)
+
+# number of support points
+n_points <- 100
+```
+
+### Model
+
+```{r}
+zz <- keras_model(inputs = model_red$input, outputs = get_layer(model_red, 'attention')$output)
+ww <- get_weights(zz)
+```
+
+```{r}
+Input <- layer_input(shape = c(qqq[1]), dtype = 'float32', name = 'Design2') 
+
+Attention <- Input %>% 
+          layer_dense(units = qqq[2], activation = 'tanh', name = 'FNLayer1') %>%
+          layer_dense(units = qqq[3], activation = 'tanh', name = 'FNLayer2') %>%
+          layer_dense(units = qqq[4], activation = 'tanh', name = 'FNLayer3') %>%
+          layer_dense(units = qqq[1], activation = 'linear', name = 'attention')
+
+model_int <- keras_model(inputs = c(Input), outputs = c(Attention))  
+```
+
+```{r}
+set_weights(model_int, ww)
+```
+
+The figures below show a spline fit to these partial derivatives to all claims $1 \le i \le n$ for the continuous covariate components.
+
+### Continuous-Continuous
+
+```{r}
+col_names_cont <- col_namesR[var_cont]
+n_col_names <- length(col_names_cont)
+```
+
+```{r}
+for (jj in 1:length(col_names_cont)) {
+    beta_j <- Attention %>% layer_lambda(function(x) x[, var_cont[jj]])
+    model_grad1 <- keras_model(inputs = c(Input), outputs = c(beta_j))
+    grad <- beta_j %>% layer_lambda(function(x) k_gradients(model_grad1$outputs, model_grad1$inputs))
+
+    model_grad2 <- keras_model(inputs = c(Input), outputs = c(grad))
+    grad_beta <- data.frame(model_grad2 %>% predict(as.matrix(TT)))
+    grad_beta <- grad_beta[, var_cont]
+    names(grad_beta) <- paste0("Grad", col_names_cont)
+
+    beta_x <- cbind(test[, col_names_cont[jj]], grad_beta)
+    names(beta_x)[1] <- col_names_cont[jj]
+    beta_x <- beta_x[order(beta_x[, 1]), ]
+
+    rr <- range(beta_x[, 1])
+    xx <- rr[1] + (rr[2] - rr[1]) * 0:n_points / n_points
+    yy <- array(NA, c(n_points + 1, n_col_names))
+    for (kk in 1:length(var_cont)) {
+        yy[, kk] <- predict(locfit(beta_x[, kk + 1]~ beta_x[, 1], alpha = 0.7, deg = 2), newdata = xx)
+    }
+
+    dat_plt <- data.frame(xx, yy)
+    colnames(dat_plt) <- c("x", col_names_cont)
+    dat_plt <- dat_plt %>% gather(key = "variable", value = "value", -x)
+
+    plt <- ggplot(dat_plt, aes(x = x, y = value)) + 
+        geom_line(aes(color = variable), size = line_size) +
+        ylim(ax_limit) +
+        labs(title = paste0("Interactions of covariate ", col_names_cont[jj]),
+             x = col_names_cont[jj],
+             y = "interaction strengths")
+    print(plt)
+}
+```
+
+$\Rightarrow$ We do not observe any zero terms $\partial_{x_k} \beta_j(x) \approx 0$, saying, that non of these components can be modeled by a linear term. Moreover, we observe that most continuous variables interact, e.g., Age, WeeklyPay and AccYear interact, but also RepDelay, AccTime and AccYear interact, as well as Age with AccTime. Only, AccMonth does not seem to have major interactions with other variables. 
+
+### Continuous-Binary
+
+The figures below show the interactions of the continuous variables with the binary variables.
+
+```{r}
+col_names_cont <- col_namesR[var_cont]
+col_names_bin <- col_namesR[var_bin]
+n_col_names <- length(col_names_bin)
+```
+
+```{r}
+for (jj in 1:length(col_names_cont)) {
+    beta_j <- Attention %>% layer_lambda(function(x) x[, var_cont[jj]])
+    model_grad1 <- keras_model(inputs = c(Input), outputs = c(beta_j))
+    grad <- beta_j %>% layer_lambda(function(x) k_gradients(model_grad1$outputs, model_grad1$inputs))
+
+    model_grad2 <- keras_model(inputs = c(Input), outputs = c(grad))
+    grad_beta <- data.frame(model_grad2 %>% predict(as.matrix(TT)))
+    grad_beta <- grad_beta[, var_cont]
+    names(grad_beta) <- paste0("Grad", col_names_cont)
+
+    beta_x <- cbind(test[, col_names_cont[jj]], grad_beta)
+    names(beta_x)[1] <- col_names_cont[jj]
+    beta_x <- beta_x[order(beta_x[, 1]), ]
+
+    rr <- range(beta_x[, 1])
+    xx <- rr[1] + (rr[2] - rr[1]) * 0:n_points/n_points
+    yy <- array(NA, c(n_points + 1, n_col_names))
+    for (kk in 1:length(var_bin)) {
+        yy[, kk] <- predict(locfit(beta_x[, kk + 1]~ beta_x[, 1] , alpha = 0.7, deg = 2), newdata = xx)
+    }
+
+    dat_plt <- data.frame(xx, yy)
+    colnames(dat_plt) <- c("x", col_names_bin)
+    dat_plt <- dat_plt %>% gather(key = "variable", value = "value", -x)
+
+    plt <- ggplot(dat_plt, aes(x = x, y = value)) + 
+        geom_line(aes(color = variable), size = line_size) +
+        ylim(ax_limit) +
+        labs(title = paste0("Interactions of covariate ", col_names_cont[jj]),
+             x = col_names_cont[jj],
+             y = "interaction strengths")
+    print(plt)
+}
+```
+
+$\Rightarrow$  Also here we observe major interactions, e.g., between Age, PartTimeFullTime and Gender, or WeeklyPay and PartTimeFullTime, AccMonth and Gender or AccTime and DependentChildren.
+
+**Exercise:** Based on the results above, how would the plots look like when there are no interactions? You can try to look at the randomly generated features and validate your guess
+
+# Conclusions
+
+This tutorial presents the LocalGLMnet which gives us an interpretable network architecture.
+* We have seen that this architecture allows for variable selection.
+* It allows to quantify variable importance.
+* It allows for the study of interactions.
+
+We see the major advantage of LocalGLMnet by allowing to quickly understand the data, in a very simple and straightforward way. LocalGLMnet brings faster a much better understanding than well-known techniques from explainable Machine Learning.
+
+We have exemplified this on a synthetic accident insurance data set, and we have identified variables that can be dropped from the model.
+
+As a side product we have seen that working with claim sizes can be challenging because the commonly used distributional models for regression modeling are less heavy-tailed than typical insurance claim size data. If this is the case, the regression models often slightly over-fit to the largest claims. This can be partially mitigated by a more robust estimation approach.
+
+# Exercises
+
+**Exercise:** Use the function `square_loss` provided and fit models using the square loss function and compare the results. What do you conclude?
+
+**Exercise:** Change the value of $p$ and compare the results.
+
+**Exercise:** Change the `validation_split` argument for training the models and compare the results. Does this has a relevant impact on the results?
+
+**Exercise:** Change the `batch_size` argument for training the models and compare the results. Does this has a relevant impact on the results?
+
+**Exercise:** Change the number of neurons, compare the number of parameters and the fitted results.
+
+**Exercise:** Read the documentation to the optimizers and run the subsequent analysis with different optimizers and compare the results.
+
+**Exercise:** Change the random seeds (at the beginning of the tutorial) and compare the results.
+
+**Exercise:** Run the same analysis and see if you can fully reproduce the results. What do you conclude from that?
+
+**Exercise:** Change the activation function (only where it is appropriate) and compare the results.
+
+**Exercise:** Change the validation_split and verbose argument and see the difference in the fitting of the model.
+
+**Exercise:** The derivation of variable importance, the regression attentions and the interactions is not easy to follow. Try to understand the code in more details.
+
+**Exercise:** Write a function which calculates the regression attentions and the covariance contributions.
+
+# Session Info
+
+The html is generated with the follow packages (which might be slightly newer than the ones used in the published tutorial).
+
+```{r}
+sessionInfo()
+```
+
+```{r}
+reticulate::py_config()
+```
+
+```{r}
+tensorflow::tf_version()
+```
+
+# References
+
+- https://tensorflow.rstudio.com/guide/
+- https://github.com/rstudio/cheatsheets/raw/master/keras.pdf
+- https://cran.r-project.org/web/packages/keras/vignettes/guide_keras.html
+- https://keras.rstudio.com/articles/about_keras_models.html
+- https://keras.rstudio.com/articles/functional_api.html
+- https://cran.rstudio.com/web/packages/keras/vignettes/sequential_model.html
+- https://www.rdocumentation.org/packages/keras/versions/2.3.0.0/topics/layer_dense
+- https://www.rdocumentation.org/packages/keras/versions/2.1.6/topics/compile
+
