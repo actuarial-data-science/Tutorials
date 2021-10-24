@@ -1,0 +1,458 @@
+---
+title: Descriptive Statistics
+output:
+  # disable alt text rendered as figure caption
+  html_document:
+    fig_caption: false
+  pdf_document:
+    fig_caption: false
+---
+
+# **French Motor Third-Party Liability Claims**
+
+Daniel Meier and Jürg Schelldorfer, with support from Christian Lorentzen, Friedrich Loser, Michael Mayer, Mario V. Wüthrich and [Mirai Solutions GmbH](https://mirai-solutions.ch/).
+
+2021-15-10
+
+# Introduction
+
+This notebook was created for the course "Deep Learning with Actuarial Applications in R" of the Swiss Association of Actuaries (https://www.actuaries.ch/).
+
+This notebook serves as companion to the tutorial “Case Study: French Motor Third-Party Liability Claims”, available on [SSRN](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3164764).
+
+The code is similar to the code used in above tutorial and combines the raw R code in the scripts, available on [GitHub](https://github.com/JSchelldorfer/ActuarialDataScience/tree/master/1%20-%20French%20Motor%20Third-Party%20Liability%20Claims) along with some more comments. Please refer to the tutorial for explanations.
+
+Note that the results might vary depending on the R and Python package versions, see last section for the result of sessionInfo() and corresponding info on the Python setup.
+
+# Data Preparation
+
+The tutorial uses the French MTPL data set available on [openML (ID 41214)](https://www.openml.org/d/41214).
+
+## Load packages and data
+
+```{r}
+library(rgdal)
+# library(rgeos)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(corrplot)
+```
+
+```{r}
+# plotting parameters in R Markdown notebook
+knitr::opts_chunk$set(fig.width = 9, fig.height = 9)
+# plotting parameters in Jupyter notebook
+library(repr)  # only needed for Jupyter notebook
+options(repr.plot.width = 9, repr.plot.height = 9)
+```
+
+## Set global parameters
+
+```{r}
+options(encoding = 'UTF-8')
+```
+
+## Helper functions
+
+Subsequently, for ease of reading, we provide all the helper functions which are used in this tutorial in this section.
+
+```{r}
+summarize <- function(...) suppressMessages(dplyr::summarize(...))
+```
+
+```{r}
+load_data <- function(file) {
+  load(file.path("../0_data/", file), envir = parent.frame(1))
+}
+```
+
+```{r}
+runMultiPlot <- function(dat, VarName) {
+  dat <- rename(dat, "VarName" = all_of(VarName))
+  out_sum <- dat %>%
+    group_by(VarName) %>% 
+    summarize(NrObs = length(Exposure),
+              Exp = sum(Exposure),
+              Nr.Claims = sum(ClaimNb),
+              Freq = sum(ClaimNb) / sum(Exposure),
+              StDev = sqrt(sum(ClaimNb)) / sum(Exposure))
+  # Plot 1
+  p1 <- ggplot(out_sum, aes(x = VarName, y = Exp, fill = VarName)) +
+    geom_bar(stat = "identity") +
+    geom_text(stat = 'identity', aes(label = round(Exp, 0), color = VarName), vjust = -0.5, size = 2.5) +
+    labs(x = VarName, y = "Exposure in years", title = "exposure") + theme(legend.position = "none")
+  
+  # Plot 2
+  p2 <- ggplot(out_sum, aes(x = VarName, group = 1)) + geom_point(aes(y = Freq, colour = "observed")) +
+    geom_line(aes(y = Freq, colour = "observed"), linetype = "dashed") +
+    geom_line(aes(x = as.numeric(VarName), y = pf_freq), color = "red") +
+    geom_line(aes(x = as.numeric(VarName), y = Freq + 2 * StDev), color = "red", linetype = "dotted") +
+    geom_line(aes(x = as.numeric(VarName), y = Freq - 2 * StDev), color = "red", linetype = "dotted") +
+    ylim(0, 0.35) + 
+    labs(x = paste(VarName, "groups"), y = "frequency", title = "observed frequency") + theme(legend.position = "none")
+  
+  # Plot 3
+  p3 <- ggplot(out_sum) + geom_bar(stat = "identity", aes(x = VarName, y = Freq, fill = VarName)) +
+    geom_line(aes(x = as.numeric(VarName), y = pf_freq), color = "red") + guides(fill = FALSE) +
+    labs(x = paste(VarName, "groups"),  y = "frequency", title = "observed frequency") + theme(legend.position = "bottom")
+  
+  grid.arrange(p1, p2, p3, ncol = 2)
+}
+
+plot_2dim_contour <- function(data, VarX, VarY, LabelX, LabelY) {
+  data <- rename(data, "VarX" = all_of(VarX), "VarY" = all_of(VarY))
+  df_plt <- data %>%
+    group_by(VarX, VarY) %>%
+    summarize(Exp = sum(Exposure),
+              Freq = sum(ClaimNb) / sum(Exposure),
+              Pol = n())
+  p <- ggplot(df_plt, aes(
+    x = as.numeric(VarX),
+    y = as.numeric(VarY),
+    z = Exp
+  )) + geom_contour_filled() + labs(x = LabelX, y = LabelY)
+}
+
+plotMap <- function(area_points, Var, label, clow, chigh) {
+  area_points <- rename(area_points, "Var" = all_of(Var))
+  ggplot(area_points, aes(long, lat, group=group)) +
+    ggtitle(paste(label, "by region", sep = " ")) +
+    geom_polygon(aes(fill = Var)) +
+    scale_fill_gradient(low = clow, high = chigh, name = label) +
+    xlab("Longitude") + ylab("Latitude")
+}
+```
+
+## Load data
+
+We consider the data `freMTPL2freq` included in the R package `CASdatasets` for claim frequency modeling. This data comprises a French motor third-party liability (MTPL) insurance portfolio with corresponding claim counts observed in one accounting year.
+We do not incorporate claim sizes which would also be available through freMTPL2sev.
+
+As the current package version provides a slightly amended dataset, we use an older dataset available on [openML (ID 41214)](https://www.openml.org/d/41214). Before we can use this data set we need to do some data cleaning. It has been pointed out by [F. Loser](https://www.kaggle.com/floser/comparing-claims-fremtpl2freq-sev/execution) that some claim counts do not seem to be correct. Hence, we use the pre-processing of the data described in the book ["Statistical Foundations of Actuarial Learning and its Applications"](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3822407) in Appendix A.1. This pre-processed data can be downloaded from the course GitHub page [here](https://github.com/JSchelldorfer/DeepLearningWithActuarialApplications).
+
+```{r}
+load_data("freMTPL2freq.RData")
+```
+
+## Inspect the raw dataset
+
+```{r}
+str(freMTPL2freq)
+```
+
+```{r}
+knitr::kable(head(freMTPL2freq))
+```
+
+We briefly describe this data. See the `CASdatasets` reference manual [here](http://cas.uqam.ca/pub/web/CASdatasets-manual.pdf) for a description of the variables of the `freMTPLfre` dataset.
+
+We have 6'780'013 individual car insurance policies and for each policy we have 12 variables:
+
+- $\texttt{IDpol}$: policy number (unique identifier)
+- $\texttt{ClaimNb}$: number of claims on the given policy
+- $\texttt{Exposure}$: total exposure in yearly units
+- $\texttt{Area}$: area code (categorical, ordinal)
+- $\texttt{VehPower}$: power of the car (categorical, ordinal)
+- $\texttt{VehAge}$: age of the car in years
+- $\texttt{DrivAge}$: age of the (most common) driver in years
+- $\texttt{BonusMalus}$: bonus-malus level between 50 and 230 (with reference level 100)
+- $\texttt{VehBrand}$: car brand (categorical, nominal)
+- $\texttt{VehGas}$: diesel or regular fuel car (binary)
+- $\texttt{Density}$: density of inhabitants per km2 in the city of the living place of the driver
+- $\texttt{Region}$: regions in France (prior to 2016), as illustrated below
+
+![1_desc](Figure_FrenchRegions.PNG)
+
+Please find some more charts on the raw data in the tutorial.
+
+# Data preprocessing
+
+Data preprocessing includes a couple of transformations. We ensure that ClaimNb is an integer, VehAge, DrivAge and BonusMalus have been capped for the plots at age 20, age 90 and bonus-malus level 150, respectively, to improve visualization. Density is logarithmized and VehGas is a categorical variable.
+
+```{r}
+dat <- freMTPL2freq %>% 
+  mutate(ClaimNb = as.integer(ClaimNb),
+         VehAge = pmin(VehAge, 20),
+         DrivAge = pmin(DrivAge, 90),
+         BonusMalus = round(pmin(BonusMalus, 150) / 10, 0) * 10,
+         Density = round(log(Density), 0),
+         VehGas = factor(VehGas))
+```
+
+# Descriptive Analysis
+
+In order to get used to the dataset, we start with a descriptive analysis.
+
+## Inspect the prepared dataset
+
+```{r}
+knitr::kable(head(dat))
+```
+
+```{r}
+str(dat)
+```
+
+```{r}
+summary(dat)
+```
+
+## Portfolio Structure
+
+We start by providing descriptive and exploratory statistics of the data. This comprises first the portfolio structure in terms of volumes and key statistics.
+
+```{r}
+p1 <- ggplot(dat, aes(Exposure)) + geom_histogram()
+p2 <- ggplot(dat, aes(x = "Exposure", y = Exposure)) + geom_boxplot() +
+      labs(x = "Exposure", y = "frequency", title = "boxplot of exposure")
+p3 <- ggplot(dat, aes(ClaimNb)) + geom_histogram() +
+      labs(x = "number of claims", y = "frequency", title = "histogram of claims number")
+grid.arrange(p1, p2, p3, ncol = 2)
+```
+
+We start by describing the $\texttt{Exposure}$. The $\texttt{Exposure}$ measures the duration of an insurance policy in yearly units; sometimes it is also called years-at-risk. The shortest exposure in our data set is 0.0027 which corresponds to 1 day, and the longest exposure is 1 which corresponds to 1 accounting year. The figure shows a histogram and a boxplot of these exposures. In view of the histogram we conclude that roughly 1/4 of all policies have a full exposure of 1 accounting year, and all other policies are only partly exposed during the accounting year. From a practical point of view this high ratio of partly exposed policies seems rather unusual. A further inspection of the data indicates that policy renewals during the year are accounted for two separate records in the data set. Of course, such split policies should be merged to one yearly policy. Unfortunately, we do not have the necessary information to perform this merger, therefore, we need to work with the data as it is.
+
+On 653’069 insurance policies (amounting to a total exposure of 341’090 years-at-risk) we do not have any claim, and on the remaining 24’938 policies (17’269 years-at-risk) we have at least one claim.
+
+```{r}
+dat %>% 
+  group_by(ClaimNb) %>% 
+  summarize(n = n(), Exposure = round(sum(Exposure), 0))
+```
+
+Before fitting any model later, let us see what the overall observed claim frequency in the data is.
+
+```{r}
+# calculate portfolio claims frequency
+pf_freq <- sum(dat$ClaimNb) / sum(dat$Exposure)
+
+# portfolio claims frequency (homogeneous estimator)
+sprintf("Portfolio claim frequency:  %s", round(pf_freq, 4))
+```
+
+## Observed (marginal) frequencies
+
+Describing the observed (marginal) frequencies build the foundations for fitting any frequency model to the data.
+Below, we provide  exposures per variable on the top left, the marginal empirical frequency per variable (w.r.t. $\texttt{Exposure}$) (bottom left) and the marginal empirical frequencies including confidence intervals.
+
+The frequencies are complemented by confidence bounds of two standard deviations (dotted
+lines). These confidence bounds correspond to twice the estimated standard deviations, see Appendix A.1 in the [book](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3822407) for the mathematical definition. We note that in all frequency plots the y-axis ranges from 0% to 35%. From these plots we conclude that some labels have only a small underlying $\texttt{Exposure}$, $\texttt{BonusMalus}$ leads to the highest variability in frequencies followed by $\texttt{DrivAge}$; and there is quite some heterogeneity in feature values across the different French regions.
+
+### Area
+
+```{r}
+runMultiPlot(dat, VarName = "Area")
+```
+
+
+### VehPower
+
+```{r}
+runMultiPlot(dat, VarName = "VehPower")
+```
+
+
+### VehAge
+
+```{r}
+runMultiPlot(dat, VarName = "VehAge")
+```
+
+
+### DrivAge
+
+```{r}
+runMultiPlot(dat, VarName = "DrivAge")
+```
+
+
+### BonusMalus
+
+```{r}
+runMultiPlot(dat, VarName = "BonusMalus")
+```
+
+
+### VehBrand
+
+```{r}
+runMultiPlot(dat, VarName = "VehBrand")
+```
+
+
+### VehGas
+
+```{r}
+runMultiPlot(dat, VarName = "VehGas")
+```
+
+
+### Density
+
+```{r}
+runMultiPlot(dat, VarName = "Density")
+```
+
+
+### Region
+
+```{r}
+runMultiPlot(dat, VarName = "Region")
+```
+
+## Two-dimensional contour plots: Exposure
+
+In the previous sections, we have focused on the one-dimensional marginal exposure and frequencies. We provide the two-dimensional plots of the portfolio distribution (exposure) of some variables. These plots are useful to detect collinearity in the feature components.
+
+The function below takes two variables as inputs and their names, and `plot_2dim_contour` shows the sum of the exposure by a unique combination of variable 1 and variable 2.
+
+```{r}
+p1 <- plot_2dim_contour(dat, "Area", "BonusMalus", "area group",  "bonus-malus group")
+p2 <- plot_2dim_contour(dat, "VehPower", "DrivAge", "vehicle power group",  "driver age group")
+p3 <- plot_2dim_contour(dat, "VehPower", "BonusMalus", "vehicle power group",  "bonus-malus group")
+p4 <- plot_2dim_contour(dat, "VehAge", "DrivAge", "vehicle age group",  "driver age group")
+
+grid.arrange(p1, p2, p3, p4, ncol = 2)
+```
+
+Observations are: (a) the area code has a slight positive dependence with the bonus-malus level and a slight
+negative dependence with the vehicle age and driver's age, (b) the vehicle power has a slight
+positive dependence with driver's age, (c) the vehicle power has a slight negative dependence
+with the bonus-malus level, (d) younger people drive newer cars.
+
+**Exercise:** Change the function `plot_2dim_contour` to use the claim frequency as the color in the charts above, and not the exposure.
+
+**Exercise:** Change the function `plot_2dim_contour` to use the number of policies as the color in the charts above, and not the exposure.
+
+**Exercise:** Look at other combinations of variables in the data, e.g. area code and the density of the population.
+
+## Correlations
+
+
+Let us calculate the Pearson and Spearman correlation between the variables.
+
+```{r}
+df_cor <- dat %>% 
+  select(Area, VehPower, VehAge, DrivAge, BonusMalus, Density) 
+df_cor$Area <- as.numeric(df_cor$Area)
+df_cor$VehPower <- as.numeric(df_cor$VehPower)
+```
+
+
+
+```{r}
+M <- round(cor(df_cor, method = "pearson"), 2)
+knitr::kable(M)
+corrplot(M, method = "color")
+```
+
+
+
+```{r}
+M <- round(cor(df_cor, method = "spearman"), 2)
+knitr::kable(M)
+corrplot(M, method = "color")
+```
+
+
+## Geographical maps
+
+As Region is available in the data, we are interested in plotting the claim frequencies by region in a geographical map.
+
+First, let us calculate the metrics per region, transforming the categorical variables to numerical in order to be able to compare values. Mutating categorical variables to numerical is not ideal, but it allows to visualize data in a more convenient form and still derive some insights.
+
+```{r}
+reg_sum <- dat %>% 
+  group_by(Region) %>% 
+  mutate(VehGas = factor(VehGas)) %>% 
+  mutate_at(c("Area", "VehPower", "VehGas"), as.numeric) %>% 
+  summarize(NrObs = length(Exposure),
+            Exp = sum(Exposure),
+            Freq = sum(ClaimNb) / sum(Exposure),
+            Area = mean(Area),
+            VehPower = mean(VehPower),
+            VehAge = mean(VehAge),
+            DrivAge = mean(DrivAge),
+            BonusMalus = mean(BonusMalus),
+            VehGas = mean(VehGas),
+            Density = mean(Density))
+
+knitr::kable(head(reg_sum, n = 10))
+```
+
+The visualizations can be done using data containing the boundaries of regions and the two R packages `rgdal` and `rgeos`. Please check their reference manual for further details about them.
+
+First, we need to import the files which contain the map to be displayed. Geo data have some standard formats, which we are not going to discuss here. See the R packages `rgal` and `rgeos` for further information and links.
+
+```{r}
+# Downloaded shapefiles from http://www.diva-gis.org/gData and extracted all the files from the zip file.
+area <- rgdal::readOGR(file.path("../../data/shapefiles", "FRA_adm2.shp"))
+```
+
+Second, we need to merge the aggregated information from the insurance data to the geographical data.
+
+```{r}
+reg_sum$id <- sapply(reg_sum$Region, substr, 2, 3)
+area_points <- fortify(area, region = "ID_1")  # convert to data.frame
+```
+
+Unfortunately, the numerical regional labels in the geographical data (labeled as $1,...,22$) do not match the numerical labels in the insurance data, hence we need to convert them in order to be able to merge the insurance and geographical data by a unique key. We do it manually (see `mapvalues` for another way).
+
+```{r}
+area_points$id <- recode(
+  area_points$id,
+  "1"="42","2"="72","3"="83","4"="11","5"="25","6"="26","7"="53","8"="24","9"="21",
+  "10"="94","11"="43","12"="23","13"="91","14"="74","15"="41","16"="73","17"="31",
+  "18"="52","19"="22","20"="54","21"="93","22"="82"
+)
+```
+
+```{r}
+area_points <- merge(
+  area_points,
+  reg_sum[, c("id","Exp","Freq","Area","VehPower","VehAge","DrivAge","BonusMalus","VehGas","Density")],
+  by.x = "id",
+  by.y = "id",
+  all.x = TRUE
+)
+area_points <- area_points[order(area_points$order), ]  # Has to be ordered correctly to plot.
+```
+
+Third, we can do the map plots.
+
+```{r}
+plotMap(area_points, "Exp", "Exposure", "blue", "red")
+```
+
+```{r}
+plotMap(area_points, "Freq", "Observed frequencies", "green", "red")
+```
+
+
+```{r}
+plotMap(area_points, "VehGas", "Average diesel ratio", "green", "red")
+```
+
+```{r}
+plotMap(area_points, "VehAge", "average vehicle age", "green", "red")
+```
+
+Please find some more charts on the raw data in the tutorial.
+
+**Exercise:** Do additional plots for the following variables: $\texttt{density}$, $\texttt{BonusMalus}$ and $\texttt{VehGas}$. You might need to convert the categorical features to some numerical values in order to get a meaningful plot.
+
+**Exercise:** The coloring of the mas is not necessarily illustrative due to the skewed distribution of metrics by region. Amend the function plotMap to better capture the skewness.
+
+**Exercise:** In the tutorial, you find the subsequent charts (which describe the distribution of the variables $\texttt{Area}$, $\texttt{VehPower}$, $\texttt{VehAge}$, $\texttt{DrivAge}$, $\texttt{BonusMalus}$, $\texttt{VehGas}$ for each car brand  $\texttt{VehBrand}$ individually), write the code for them.
+
+![1_desc](Figure_percentages.PNG)
+
+# Session Info
+
+The html is generated with the follow packages (which might be slightly newer than the ones used in the published tutorial).
+
+```{r}
+sessionInfo()
+```
+
