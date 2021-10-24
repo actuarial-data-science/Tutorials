@@ -13,7 +13,7 @@ Here you find the code to the article "Case Study: French Motor Third-Party Liab
 
 ### R Markdown / notebooks
 - [freMTPLfreq_desc](https://htmlpreview.github.io/?https://github.com/JSchelldorfer/ActuarialDataScience/blob/master/1%20-%20French%20Motor%20Third-Party%20Liability%20Claims/freMTPLfreq_desc.html) (.html,.r,.Rmd, .pdf, .ipynb) (please click on the link to preview html output; in order to see the table of contents properly, download the html and open it in your browser.)
-- freMTPLfreq_glm (.html,.r,.Rmd, .pdf, .ipynb) (please click on the link to preview html output; in order to see the table of contents properly, download the html and open it in your browser.)
+- [freMTPLfreq_glm](https://htmlpreview.github.io/?https://github.com/JSchelldorfer/ActuarialDataScience/blob/master/1%20-%20French%20Motor%20Third-Party%20Liability%20Claims/freMTPLfreq_glm.html) (.html,.r,.Rmd, .pdf, .ipynb) (please click on the link to preview html output; in order to see the table of contents properly, download the html and open it in your browser.)
 
 ### R Code using Tensorflow*
 - FreMTPL_TensorFlow.nb.html
