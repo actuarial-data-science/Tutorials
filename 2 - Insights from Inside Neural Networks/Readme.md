@@ -11,7 +11,7 @@ available from https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3226852.
   - V0_2 network architectures.r
 - V1_1 KERAS network modeling.r
 
-### Markdown / Notebooks
+### Notebooks / R markdown
 - freMTPLfreq_fnn.html
 - freMTPLfreq_fnn.Rmd
 - freMTPLfreq_fnn.r
