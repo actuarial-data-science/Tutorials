@@ -11,9 +11,9 @@ Here you find the code to the article "Convolutional neural network case studies
 - cnn2.zip
 
 ### R Notebooks
-- cnn1_r.html
-- cnn2_r.html
-- cnn3_r.html
+- [cnn1_r.html](https://htmlpreview.github.io/?https://github.com/JSchelldorfer/ActuarialDataScience/blob/master/9%20-%20Convolutional%20neural%20network%20case%20studies/cnn1_r.html)
+- [cnn2_r.html](https://htmlpreview.github.io/?https://github.com/JSchelldorfer/ActuarialDataScience/blob/master/9%20-%20Convolutional%20neural%20network%20case%20studies/cnn2_r.html)
+- [cnn3_r.html](https://htmlpreview.github.io/?https://github.com/JSchelldorfer/ActuarialDataScience/blob/master/9%20-%20Convolutional%20neural%20network%20case%20studies/cnn3_r.html)
 
 ### Data
 - mortality rates
