@@ -14,7 +14,7 @@ Here you find the code to the article "Lee and Carter go Machine Learning: Recur
 - 04_b LSTM - deep 3 both genders.R
 
 ### Notebooks (R)
-- [CHEmort_rnn.html]() (please click on this link to preview html output)
+- [CHEmort_rnn.html](https://htmlpreview.github.io/?https://github.com/JSchelldorfer/ActuarialDataScience/blob/master/6%20-%20Lee%20and%20Carter%20go%20Machine%20Learning%20Recurrent%20Neural%20Networks/CHEmort_rnn.html) (please click on this link to preview html output)
 - CHEmort_rnn.Rmd
 - CHEmort_rnn.r
 - CHEmort_rnn.ipynb
