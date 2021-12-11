@@ -40,7 +40,7 @@ plot_loss <- function(x) {
     } else exit
 }
 
-load("/home/s3m3wx/SAV_2021_Blockcourse/1_glm/freMTPL2freq.RData")
+load("freMTPL2freq.RData")
 
 # Grouping id
 distinct <- freMTPL2freq %>% 
