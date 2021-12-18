@@ -1,18 +1,29 @@
 ---
-title: Local GLM Net (LGN)
+title: 'Workers Compensation Claims'
+subtitle: 'Local GLM Net (LGN)'
+author: "Daniel Meier and Jürg Schelldorfer, with support from Christian Lorentzen, Friedrich Loser, Michael Mayer, Mario V. Wüthrich and [Mirai Solutions GmbH](https://mirai-solutions.ch/)"
+date: "`r Sys.Date()`"
 output:
-  # disable alt text rendered as figure caption
   html_document:
-    fig_caption: false
+    df_print: paged
+    highlight: default
+    number_sections: yes
+    theme: united
+    toc: yes
+    toc_float: yes
   pdf_document:
-    fig_caption: false
+    toc: yes
 ---
 
-# **Worker's Compensation Claims**
-
-Daniel Meier and Jürg Schelldorfer, with support from Mario V. Wüthrich and [Mirai Solutions GmbH](https://mirai-solutions.ch/).
-
-2021-10-15
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, 
+  warning = FALSE,
+  message = FALSE, 
+  fig.height = 10,
+  fig.width = 12
+)
+```
 
 # Introduction
 
@@ -182,7 +193,7 @@ The dataset was kindly created and provided by Colin Priest. While similar, it i
 Before we can use this data set we need to do some data cleaning. This pre-processed data can be downloaded from the course GitHub page [here](https://github.com/JSchelldorfer/DeepLearningWithActuarialApplications/tree/master/0_data). You also find at the same place the details for this pre-processing.
 
 ```{r}
-load(file.path("../0_data/WorkersComp.RData"))  # relative path to .Rmd file
+load("WorkersComp.RData")
 ```
 
 ## General data preprocessing
@@ -202,7 +213,7 @@ dat <- dat %>% mutate(Id=1:nrow(dat))
 
 For successful regression modeling we need to pre-process (raw) covariate information. Moreover, continuous and binary variables are normalized to having zero mean and unit variance, i.e., having raw covariates, the j-th raw covariate component is normalized by
 
-![8_LocalGLMnet](Figure_normalization.PNG)
+![](Figure_normalization.PNG)
 
 where the empirical mean and the empirical standard deviation (stddev) are calculated for fixed component $j$ over all available claims $i$.
 
@@ -238,7 +249,7 @@ dat <- dat %>% mutate(
 
 Categorical (nominal) variables with more than two levels are pre-processed by one-hot encoding. Assume that the $j$-th raw covariate component is a categorical variable with $L$ levels labeled by $c_1, c_2,..., c_L$. One-hot encoding maps these $L$ levels to the $L$ unit vectors of the Euclidean space $\mathbb{R}^L$. Thus, having raw categorical variable, we receive its one-hot encoding by the embedding
 
-![8_LocalGLMnet](Figure_cat_normalization.PNG)
+![](Figure_cat_normalization.PNG)
 
 Note that one-hot encoding is different from dummy coding. Dummy coding selects a reference level and maps the levels different from the reference level to the $L - 1$ unit vectors of the
 Euclidean space $\mathbb{R}^{L-1}$. Dummy coding leads to full rank design matrices which is important in GLM. One-hot encoding does not give full rank design matrices because we have one redundancy
@@ -557,9 +568,9 @@ corrplot(corrMat, method = "color")
 
 Below, we show some screenshots from the tutorial on the tweedie distribution for claim size modelling. See the tutorial for additional theoretical considerations.
 
-![8_LocalGLMnet](Figure_claimSizeTheory1.PNG)
+![](Figure_claimSizeTheory1.PNG)
 
-![8_LocalGLMnet](Figure_claimSizeTheory2.PNG)
+![](Figure_claimSizeTheory2.PNG)
 
 # General modelling: parameters
 
@@ -1052,9 +1063,10 @@ df_cmp
 ```
 
 We can draw the following conclusions:
-* Fitting these networks takes in average ~30 epochs, thus, fitting is very fast here.
-* We give preference to the gamma model $p = 2$. However, these solutions would need further analysis to perform a thorough model selection, e.g., one can study Tukey{Anscombe plots, dispersion parameters, etc. We refrain from doing so because this is not the main purpose of this notebook.
-* We remark that the inverse Gaussian model does not have the lowest in-sample loss on $L_{p=3}$. This seems counter-intuitive, but it is caused by the fact that we exercise early stopping. In fact, the inverse Gaussian model is more sensitive in fitting and, typically, this results in an earlier stopping time. Here, it uses less than 30 epochs, whereas the other two cases use more than 30 epochs. In general, the inverse Gaussian model is more difficult to fit.
+
+- Fitting these networks takes in average ~30 epochs, thus, fitting is very fast here.
+- We give preference to the gamma model $p = 2$. However, these solutions would need further analysis to perform a thorough model selection, e.g., one can study Tukey{Anscombe plots, dispersion parameters, etc. We refrain from doing so because this is not the main purpose of this notebook.
+- We remark that the inverse Gaussian model does not have the lowest in-sample loss on $L_{p=3}$. This seems counter-intuitive, but it is caused by the fact that we exercise early stopping. In fact, the inverse Gaussian model is more sensitive in fitting and, typically, this results in an earlier stopping time. Here, it uses less than 30 epochs, whereas the other two cases use more than 30 epochs. In general, the inverse Gaussian model is more difficult to fit.
 
 **Exercise:** Compare the number of epochs to the number of epochs in the Frnech Motor Third Party Liability tutorials and notebooks.
 
@@ -1064,9 +1076,9 @@ The FFN network architectures of the table above often provide good predictive p
 
 Below some extracts from the tutorial [here](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3900350).
 
-![8_LocalGLMnet](Figure_theoryLGN1.PNG)
+![](Figure_theoryLGN1.PNG)
 
-![8_LocalGLMnet](Figure_theoryLGN2.PNG)
+![](Figure_theoryLGN2.PNG)
 
 # Model(s) 2: LocalGLMnet
 
@@ -1455,13 +1467,13 @@ We can draw the following conclusions:
 
 In the following chapters, we are going to explore the various interpretations of the regression functions, which is the beauty and main benefit of LocalGLMnet!
 
-![8_LocalGLMnet](Figure_interpretations.PNG)
+![](Figure_interpretations.PNG)
 
 # LocalGLMnet: Variable selection and variable importance
 
 We are going to examine points (1) and (2) from the previous extract.
 
-![8_LocalGLMnet](Figure_varSel.PNG)
+![](Figure_varSel.PNG)
 
 ## Data Preparation
 
@@ -1625,7 +1637,7 @@ Second, we need to adjust the predictions with the corresponding layer wieght to
 
 Below an illustration which helps to understand the `get_weights` functions.
 
-![8_LocalGLMnet](Figure_get_weights.PNG)
+![](Figure_get_weights.PNG)
 
 ```{r}
 # multiply with the corresponding weight
@@ -1733,7 +1745,7 @@ random additional components show to much structure in the fitted model, then, f
 
 ## Variable importance plot
 
-![8_LocalGLMnet](Figure_varImp.PNG)
+![](Figure_varImp.PNG)
 
 ```{r}
 # calculate variable importance
@@ -1888,7 +1900,7 @@ sprintf("Average claim size (test): %s", round(mean(test$fitred), 0))
 
 Next we plot covariate contributions $\hat{\beta}_j(x)x_j$, which is the attribution of the predictor to the different additive components, see formula (5.3) below.
 
-![8_LocalGLMnet](Figure_LocalGLMnet.PNG)
+![](Figure_LocalGLMnet.PNG)
 
 ## Extract the regression attentions $\hat{\beta_j}(x_i)$
 
@@ -2022,7 +2034,7 @@ $\Rightarrow$ Finally, the figure above gives the covariate contributions $\hat{
 
 We are going to examine point (3) of the interpretation for LocalGLMnet.
 
-![8_LocalGLMnet](Figure_interactions.PNG)
+![](Figure_interactions.PNG)
 
 We analyze the interaction terms by studying the sensitivities $\partial_{x_k} \beta_j(x)$ given in (5.5). A zero term  $\partial_{x_k} \beta_j(x) \approx 0$ for $k = j$ supports linearity, and $\partial_{x_k} \beta_j(x) \neq 0$ for $k \neq j$ means that $x_k$ and $x_j$ interact.
 
@@ -2161,9 +2173,10 @@ $\Rightarrow$  Also here we observe major interactions, e.g., between Age, PartT
 # Conclusions
 
 This tutorial presents the LocalGLMnet which gives us an interpretable network architecture.
-* We have seen that this architecture allows for variable selection.
-* It allows to quantify variable importance.
-* It allows for the study of interactions.
+
+- We have seen that this architecture allows for variable selection.
+- It allows to quantify variable importance.
+- It allows for the study of interactions.
 
 We see the major advantage of LocalGLMnet by allowing to quickly understand the data, in a very simple and straightforward way. LocalGLMnet brings faster a much better understanding than well-known techniques from explainable Machine Learning.
 
