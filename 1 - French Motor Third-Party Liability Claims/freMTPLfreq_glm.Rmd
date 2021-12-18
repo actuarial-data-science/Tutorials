@@ -1,18 +1,30 @@
 ---
-title: Generalized Linear Model (GLM)
+title: 'French Motor Third-Party Liability'
+subtitle: 'Generalized Linear Models (GLM)'
+author: "Daniel Meier and Jürg Schelldorfer, with support from Christian Lorentzen, Friedrich Loser, Michael Mayer, Mario V. Wüthrich and [Mirai Solutions GmbH](https://mirai-solutions.ch/)."
+date: "`r Sys.Date()`"
 output:
-  # disable alt text rendered as figure caption
   html_document:
-    fig_caption: false
+    df_print: paged
+    highlight: default
+    number_sections: yes
+    theme: united
+    toc: yes
+    toc_float: yes
   pdf_document:
-    fig_caption: false
+    toc: yes
 ---
 
-# **French Motor Third-Party Liability Claims**
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, 
+  warning = FALSE,
+  message = FALSE, 
+  fig.height = 5,
+  fig.width = 6
+)
+```
 
-Daniel Meier and Jürg Schelldorfer, with support from Christian Lorentzen, Friedrich Loser, Michael Mayer, Mario V. Wüthrich and [Mirai Solutions GmbH](https://mirai-solutions.ch/).
-
-2021-15-10
 
 # Introduction
 
@@ -67,7 +79,7 @@ summarize <- function(...) suppressMessages(dplyr::summarize(...))
 
 ```{r}
 load_data <- function(file) {
-  load(file.path("../0_data/", file), envir = parent.frame(1))
+  load(file.path(file), envir = parent.frame(1))
 }
 ```
 
@@ -193,7 +205,7 @@ One of the frequent mistakes is to do the pre-processing after the split or inco
 
 In the following, we will fit various claim frequency models based on a Poisson assumption, to be more precise we make the following assumptions:
 
-![1_desc](Figure_ModelAssumptions.PNG)
+![](Figure_ModelAssumptions.PNG)
 
 A priori, there is not sufficient information about this data to do a sensible decision about the best consideration of the exposure measure, either as feature or as offset. In the following we treat the exposure $v_i$ as offset to be consistent.
 
@@ -530,7 +542,7 @@ gridExtra::grid.arrange(p1, p2, p3, p4)
 
 We have fitted three different models, as follows:
 
-![1_glm](Figure_glms.PNG)
+![](Figure_glms.PNG)
 
 We present the results of these three models below. These results are obtained by first fitting the three models to the learning data set $\mathcal{D}$, which provides the corresponding MLEs. These MLEs are then used to calculate the in-sample loss on $\mathcal{D}$. The fitted model is then applied to the testing data set $\mathcal{T}$, which provides the out-of-sample loss.
 
