@@ -1,18 +1,29 @@
 ---
-title: Feed-Forward Neural Networks (FNN)
+title: 'French Motor Third-Party Liability Claims'
+subtitle: 'Feed-Forward Neural Networks (FNN)'
+author: "Daniel Meier and Jürg Schelldorfer, with support from Christian Lorentzen, Friedrich Loser, Michael Mayer, Mario V. Wüthrich and [Mirai Solutions GmbH](https://mirai-solutions.ch/)"
+date: "`r Sys.Date()`"
 output:
-  # disable alt text rendered as figure caption
   html_document:
-    fig_caption: false
+    df_print: paged
+    highlight: default
+    number_sections: yes
+    theme: united
+    toc: yes
+    toc_float: yes
   pdf_document:
-    fig_caption: false
+    toc: yes
 ---
 
-# **French Motor Third-Party Liability Claims**
-
-Daniel Meier and Jürg Schelldorfer, with support from Christian Lorentzen, Friedrich Loser, Michael Mayer, Mario V. Wüthrich and [Mirai Solutions GmbH](https://mirai-solutions.ch/).
-
-2021-15-10
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, 
+  warning = FALSE,
+  message = FALSE, 
+  fig.height = 10,
+  fig.width = 12
+)
+```
 
 # Introduction
 
@@ -124,7 +135,7 @@ We do not incorporate claim sizes which would also be available through freMTPL2
 As the current package version provides a slightly amended dataset, we use an older dataset available on [openML (ID 41214)](https://www.openml.org/d/41214). Before we can use this data set we need to do some data cleaning. It has been pointed out by [F. Loser](https://www.kaggle.com/floser/comparing-claims-fremtpl2freq-sev/execution) that some claim counts do not seem to be correct. Hence, we use the pre-processing of the data described in the book ["Statistical Foundations of Actuarial Learning and its Applications"](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3822407) in Appendix A.1. This pre-processed data can be downloaded from the course GitHub page [here](https://github.com/JSchelldorfer/DeepLearningWithActuarialApplications).
 
 ```{r}
-load_data("freMTPL2freq.RData")
+load("freMTPL2freq.RData")
 ```
 
 ## General data preprocessing
@@ -260,7 +271,7 @@ Before fitting any neural network, we fit a generalized linear model (GLM) which
 
 In the following, we will fit various claim frequency models based on a Poisson assumption, to be more precise we make the following assumptions:
 
-![2_fnn](Figure_ModelAssFNN.PNG)
+![](Figure_ModelAssFNN.PNG)
 
 The main problem to be solved is to find the regression function $\lambda(\cdot)$ such that it appropriately describes the data, and such that it generalizes to similar data which has not been seen, yet. Remark that the task of finding an appropriate regression function $\lambda : \mathcal{X} \rightarrow \mathbb{R}_+$ also includes the definition of the feature space $\mathcal{X}$ which typically varies over different modeling approaches.
 
@@ -272,7 +283,7 @@ The defined feature components are continuous in nature, but we have been turnin
 
 As an example we show how to bring DrivAge into a continuous functional form. We therefore modify the feature space $\mathcal{X}$ and the regression function $\lambda(\cdot)$ from (1.3). We replace the 7 categorical age classes by the following continuous function:
 
-![2_fnn](Figure_DrivAgeFNN.PNG)
+![](Figure_DrivAgeFNN.PNG)
 
 Thus, we replace the 7 categorical classes (involving 6 regression parameters from dummy coding) by the above continuous functional form having 5 regression parameters. The remaining parts of the regression function in (1.3) are kept unchanged
 
@@ -371,7 +382,7 @@ We need to transform (nominal) categorical feature components to numerical value
 illustration. It has 11 different labels $\{B_1, B_{10}, B_{11}, B_{12}, B_{13}, B_{14}, B_2, B_3, B_4, B_5, B_6\}$. We choose
 $B_1$ as reference label. Dummy coding then provides the coding scheme below (left). We observe that the 11 labels are replaced by 10-dimensional feature vectors $\{0,1\}^{10}$, with components summing up to either 0 or 1.
 
-![2_fnn](Figure_Encoding.PNG)
+![](Figure_Encoding.PNG)
 
 In contrast to dummy coding, one-hot encoding does not choose a reference level, but uses an indicator for each label. In this way the 11 labels of VehBrand are replaced by the 11 unit vectors. The main difference between dummy coding and one-hot encoding is that the former leads to full rank design matrices, whereas the latter does not. This implies that under one-hot encoding there are identifiability issues in parametrizations. In network modeling identifiability is less important because we typically work in over-parametrized nonconvex optimization problems (with multiple equally good models/parametrizations); on the other hand, identifiability in GLMs is an important feature because one typically tries to solve a convex optimization problem, where the full rank property is important to efficiently  and the (unique) solution.
 
@@ -392,7 +403,7 @@ Otherwise, the optimization algorithms may get trapped in saddle points or in re
 
 A popular transformation is the so-called MinMaxScaler. For this transformation we fix each continuous feature component of $x$, say $x_l$, at a time. Denote the minimum and the maximum of the domain of $x_l$ by $m_l$ and $M_l$, respectively. The MinMaxScaler then replaces
 
-![2_fnn](Figure_MinMaxScaler.PNG)
+![](Figure_MinMaxScaler.PNG)
 
 In practice, it may happen that the minimum ml or the maximum Ml is not known. In this case one chooses the corresponding minimum and/or maximum of the features in the observed data. For prediction under new features one then needs to keep the original scaling of the initially
 observed data, i.e. the one which has been used for model calibration.
@@ -529,7 +540,7 @@ In this section we provide a short explanation on the ones explicitly used below
 The tutorial covers the choice of a particular network architecture and its calibration. In each of these steps the modeler has to make
 certain decisions, and it may require that each of these decisions is revised several times in order to get the best (or more modestly a good) predictive model. The choices involve:
 
-![2_fnn](Figure_DesignDecisions.PNG)
+![](Figure_DesignDecisions.PNG)
 
 ## Gradient descent methods
 
@@ -578,7 +589,7 @@ lambda_hom <- sum(train$ClaimNb) / sum(train$Exposure)
 
 Next we discuss the choice of activation function $\phi(\cdot)$ Typical choices of activation functions are:
 
-![2_fnn](Figure_ActivFunc.PNG)
+![](Figure_ActivFunc.PNG)
 
 The particular choice of the activation function may matter: calibration of deep networks may be slightly simpler if we choose the hyperbolic tangent activation because this will guarantee that all hidden neurons are in $(-1,+1)$, which is the domain of the main activation of the neurons in the next layer.
 
@@ -592,7 +603,7 @@ Let us first fit the most simple feed-forward neural network, a so called shallo
 
 We choose a network with $K=1$ **one hidden layer** and $q_1=20$ **neurons**, which looks as follows:
 
-![2_fnn](Figure_shNN.PNG)
+![](Figure_shNN.PNG)
 
 The dimension of the input layer is defined by the selected input feature dimension (see above).
 
@@ -709,8 +720,8 @@ Below, we show two examples how the plots should ideally look like:
 
 as follows, closely copy paste what you find on the linked websites as comments:
 
-![2_fnn](Figure_Loss_RStudio.PNG)
-![2_fnn](Figure_Loss_Tutorial.PNG)
+![](Figure_Loss_RStudio.PNG)
+![](Figure_Loss_Tutorial.PNG)
 
 In the first chart (citing the comment on the page), the training loss decreases with every epoch. That’s what you would expect when running a gradient-descent optimization – the quantity you’re trying to minimize should be less with every iteration. But that isn’t the case for the validation loss and accuracy: they seem to peak at the fourth epoch. This is an example of what we warned against earlier: a model that performs better on the training data isn’t necessarily a model that will do better on data it has never seen before. In precise terms, what you’re seeing is overfitting: after the second epoch, you’re overoptimizing on the training data, and you end up learning representations that are specific to the training data and don’t generalize to data outside of the training set.
 
@@ -790,7 +801,7 @@ Before fitting and specifying a neural network, we highly recommend to draw it. 
 
 We choose a network with $K=3$ **three hidden layer** and $q_1=20$, $q_1=15$ and $q_1=10$ **neurons**, which looks as follows:
 
-![2_fnn](Figure_dpNN.PNG)
+![](Figure_dpNN.PNG)
 
 The dimension of the input layer is defined by the selected input feature dimension (see above).
 
@@ -1063,13 +1074,15 @@ So far, we have fitted three different network architectures and we are comparin
 As mentioned above, one can amend and change hyperparameters (optimizer, batch size, epochs,...) and see how the results change.
 
 One can also change the neural network architecture, e.g.
-* change the number of layers and neurons
-* add additional layers, e.g. normalization layers
-* add ridge regularization
+
+- change the number of layers and neurons
+- add additional layers, e.g. normalization layers
+- add ridge regularization
 
 See:
-* the keras cheat sheet https://github.com/rstudio/cheatsheets/raw/master/keras.pdf.
-* the tutorial: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3226852
+
+- the keras cheat sheet https://github.com/rstudio/cheatsheets/raw/master/keras.pdf.
+- the tutorial: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3226852
 
 **Exercise:** Have a look at the keras cheat sheet, study the normalization layer and add them and compare the results.
 
