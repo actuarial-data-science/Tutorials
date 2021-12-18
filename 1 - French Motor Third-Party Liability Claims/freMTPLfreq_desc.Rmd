@@ -1,18 +1,29 @@
 ---
-title: Descriptive Statistics
+title: 'French Motor Third Party Liability'
+subtitle: 'Descriptive Statistics'
+author: "Jürg Schelldorfer"
+date: "`r Sys.Date()`"
 output:
-  # disable alt text rendered as figure caption
-  html_document:
-    fig_caption: false
   pdf_document:
-    fig_caption: false
+    toc: yes
+  html_document:
+    df_print: paged
+    highlight: default
+    number_sections: yes
+    theme: united
+    toc: yes
+    toc_float: yes
 ---
 
-# **French Motor Third-Party Liability Claims**
-
-Daniel Meier and Jürg Schelldorfer, with support from Christian Lorentzen, Friedrich Loser, Michael Mayer, Mario V. Wüthrich and [Mirai Solutions GmbH](https://mirai-solutions.ch/).
-
-2021-15-10
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, 
+  warning = FALSE,
+  message = FALSE, 
+  fig.height = 5,
+  fig.width = 6
+)
+```
 
 # Introduction
 
@@ -132,7 +143,7 @@ We do not incorporate claim sizes which would also be available through freMTPL2
 As the current package version provides a slightly amended dataset, we use an older dataset available on [openML (ID 41214)](https://www.openml.org/d/41214). Before we can use this data set we need to do some data cleaning. It has been pointed out by [F. Loser](https://www.kaggle.com/floser/comparing-claims-fremtpl2freq-sev/execution) that some claim counts do not seem to be correct. Hence, we use the pre-processing of the data described in the book ["Statistical Foundations of Actuarial Learning and its Applications"](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3822407) in Appendix A.1. This pre-processed data can be downloaded from the course GitHub page [here](https://github.com/JSchelldorfer/DeepLearningWithActuarialApplications).
 
 ```{r}
-load_data("freMTPL2freq.RData")
+load("freMTPL2freq.RData")
 ```
 
 ## Inspect the raw dataset
@@ -385,9 +396,9 @@ The visualizations can be done using data containing the boundaries of regions a
 
 First, we need to import the files which contain the map to be displayed. Geo data have some standard formats, which we are not going to discuss here. See the R packages `rgal` and `rgeos` for further information and links.
 
-```{r}
+```{r, warning=FALSE, error=FALSE, message=FALSE, results=FALSE}
 # Downloaded shapefiles from http://www.diva-gis.org/gData and extracted all the files from the zip file.
-area <- rgdal::readOGR(file.path("../../data/shapefiles", "FRA_adm2.shp"))
+area <- rgdal::readOGR("shapefiles/FRA_adm2.shp")
 ```
 
 Second, we need to merge the aggregated information from the insurance data to the geographical data.
