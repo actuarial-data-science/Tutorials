@@ -1,0 +1,1133 @@
+---
+title: "Model Comparison and Calibration Assessment"
+subtitle: "User Guide for Consistent Scoring Functions in Machine Learning and Actuarial Practice"
+author: "Tobias Fissler, Christian Lorentzen, Michael Mayer"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+    df_print: paged
+    theme: united
+    highlight: zenburn
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, 
+  warning = FALSE,
+  message = FALSE, 
+  fig.height = 6,
+  fig.width = 8
+)
+```
+
+# Introduction
+
+This notebook accompanies the user guide ["Model Comparison and Calibration Assessment"](https://arxiv.org/abs/2202.12780) on [arXiv](https://arxiv.org).
+
+The code is similar to the one used in the user guide. Please refer to it for explanations.
+
+Note that the results might vary depending on the R package versions.
+
+# Regression example
+
+The regression example is based on the "Workers Compensation" claims dataset on [OpenML](https://www.openml.org/d/42876). We will model the ultimate claim amount of claims based on their initial case reserves and other claim features.
+
+## Attach all packages and fetch data
+
+The dataset is being downloaded and then stored on disk for reuse.
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(hexbin)
+library(MetricsWeighted)
+library(splines)
+library(xgboost)
+library(arrow)
+library(ggcorrplot)
+library(patchwork)
+library(scales)
+library(glm2)
+library(withr)
+
+# Workers Compensation dataset, see
+# https://www.openml.org/d/42876
+if (!file.exists("workers_compensation.parquet")) {
+  library(OpenML)
+
+  df_origin <- getOMLDataSet(data.id = 42876L)
+  df <- tibble(df_origin$data)
+  write_parquet(df, "workers_compensation.parquet")
+} else {
+  df <- read_parquet("workers_compensation.parquet")
+}
+```
+
+## Data preparation
+
+```{r}
+# Note: WeekDayOfAccident: 1 means Monday
+# Note: We filter out rows with WeeklyPay < 200
+df <- df %>% 
+  filter(WeeklyPay >= 200, HoursWorkedPerWeek >= 20) %>% 
+  mutate(
+    DateTimeOfAccident = ymd_hms(DateTimeOfAccident),
+    DateOfAccident = as_date(DateTimeOfAccident),
+    DateReported = ymd(DateReported),
+    LogDelay = log1p(as.numeric(DateReported - DateOfAccident)),
+    HourOfAccident = hour(DateTimeOfAccident),
+    WeekDayOfAccident = factor(wday(DateOfAccident, week_start = 1)), 
+    LogWeeklyPay = log1p(WeeklyPay),
+    LogInitial = log(InitialCaseEstimate),
+ #   DependentsOther = as.numeric(DependentsOther >= 1),
+    DependentChildren = pmin(4, DependentChildren),
+    HoursWorkedPerWeek = pmin(60, HoursWorkedPerWeek)
+ ) %>% 
+  mutate_at(c("Gender", "MaritalStatus", "PartTimeFullTime"), as.factor) %>% 
+  rename(HoursPerWeek = HoursWorkedPerWeek)
+
+x_continuous <- c("Age", "LogWeeklyPay", "LogInitial", "HourOfAccident",
+                 "HoursPerWeek", "LogDelay")
+x_discrete <- c("Gender", "MaritalStatus", "PartTimeFullTime",
+                "DependentChildren", "DaysWorkedPerWeek", "WeekDayOfAccident")
+x_vars <- c(x_continuous, x_discrete)
+y_var <- "UltimateIncurredClaimCost"
+
+df %>%
+  select(all_of(y_var), all_of(x_vars)) %>%
+  print(n = 10, width = 80)
+```
+
+## Exploratory data analysis
+
+### Univariate description of target
+
+```{r}
+df_values <- data.frame(
+  functional = c("mean", "median"),
+  value = c(mean(df[[y_var]]), median(df[[y_var]]))
+)
+
+ggplot(df, aes(x = UltimateIncurredClaimCost)) +
+  geom_histogram(aes(y = ..density..), bins = 200, fill = "#E69F00") +
+  geom_vline(
+    data = df_values, 
+    aes(xintercept = value, color = functional),
+    linetype = "dashed", 
+    size = 1
+  ) +
+  scale_x_log10() +
+  xlab("Log(UltimateIncurredClaimCost)") +
+  ggtitle("Histogram of UltimateIncurredClaimCost")
+```
+
+### Univariate description
+
+```{r}
+df %>%
+  select_at(x_continuous) %>%
+  pivot_longer(everything()) %>%
+  mutate(name = factor(name, levels = x_continuous)) %>%
+ggplot(aes(x = value)) +
+  geom_histogram(bins = 19, fill = "#E69F00") +
+  facet_wrap(~name, scales = "free", ncol = 3) +
+  labs(y = element_blank()) +
+  theme(
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) +
+  ggtitle("Histograms of numerical features")
+
+df %>%
+  select_at(x_discrete) %>%
+  mutate_all(as.character) %>% 
+  pivot_longer(everything()) %>%
+  mutate(
+    name = factor(name, levels = x_discrete),
+    value = factor(value)
+  ) %>%
+ggplot(aes(x = value)) +
+  geom_bar(fill = "#E69F00") +
+  facet_wrap(~name, scales = "free", ncol = 3) +
+  labs(y = "Count") +
+  ggtitle("Histograms of categorical features")
+```
+
+### Correlations across continuous covariates
+
+```{r}
+df %>%
+  select_at(x_continuous) %>%
+  cor() %>%
+  round(2) %>%
+  ggcorrplot(
+    hc.order = FALSE,
+    type = "upper",
+    outline.col = "white",
+    ggtheme = theme_minimal(),
+    colors = c("#6D9EC1", "white", "#E46726")
+  )
+```
+
+### Response in dependence of covariates
+
+```{r}
+df_cat <- df %>% 
+  select(all_of(x_discrete), all_of(y_var)) %>%
+  mutate(across(-all_of(y_var), as.factor)) %>% 
+  pivot_longer(cols = -all_of(y_var))
+
+ggplot(df_cat, aes_string("value", y_var)) +
+  geom_boxplot(varwidth = TRUE, fill = "orange") +
+  facet_wrap(~ name, scales = "free_x") +
+  scale_y_log10() +
+  xlab(element_blank()) +
+  ggtitle("Boxplots for categorical features")
+
+df_num <- df %>% 
+  select(all_of(x_continuous), all_of(y_var)) %>% 
+  pivot_longer(cols = -all_of(y_var))
+
+ggplot(df_num, aes_string("value", y = y_var)) +
+  geom_hex(bins = 18, show.legend = FALSE) +
+  facet_wrap(~ name, scales = "free") +
+  scale_y_log10() +
+  scale_fill_viridis_c(option = "magma", trans = "log10") +
+  xlab(element_blank())
+```
+
+## Data split
+
+Next, we split our dataset into training and test data.
+
+```{r}
+set.seed(1234321L)
+.in <- sample(nrow(df), round(0.75 * nrow(df)), replace = FALSE)
+train <- df[.in, ]
+test <- df[-.in, ]
+y_train <- train[[y_var]]
+y_test <- test[[y_var]]
+
+df <- df %>% 
+  mutate(dataset = factor(c("test"), c("train", "test")))
+df$dataset[.in] <- "train"
+
+df %>% 
+  group_by(dataset) %>% 
+  summarise(
+    mean = mean(UltimateIncurredClaimCost),
+    q20 = quantile(UltimateIncurredClaimCost, probs=0.2),
+    q40 = quantile(UltimateIncurredClaimCost, probs=0.4),
+    q50 = median(UltimateIncurredClaimCost),
+    q60 = quantile(UltimateIncurredClaimCost, probs=0.6),
+    q80 = quantile(UltimateIncurredClaimCost, probs=0.8),
+    q90 = quantile(UltimateIncurredClaimCost, probs=0.9)
+  )
+```
+
+## The models
+
+### Trivial Model
+
+```{r}
+trivial_predict <- function(X) {
+  mean(y_train) * rep(1, dim(X)[1])
+}
+```
+
+### OLS on log response
+
+```{r}
+form <- reformulate(x_vars, y_var)
+fit_ols <- lm(form, data = train)
+summary(fit_ols)
+r_squared(y_test, predict(fit_ols, test), reference_mean = mean(y_train))  
+# r_squared_gamma(y_test, predict(fit_ols, test), reference_mean = mean(y_train))
+# Error because of negative predictions
+
+fit_ols_log <- lm(update(form, log(UltimateIncurredClaimCost) ~ .), data = train)
+
+ols_predict <- function(X){
+  exp(predict(fit_ols_log, X))
+}
+
+# Same with bias correction
+corr_fact_ols <- mean(y_train) / mean(exp(fitted(fit_ols_log)))
+
+ols_corr_predict <- function(X) {
+  corr_fact_ols * exp(predict(fit_ols_log, X))
+}
+```
+
+### Gamma GLM
+
+```{r}
+# Note: Standard glm(..) raises
+#   Error in glm.fit(x = c(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  : 
+#   NA/NaN/Inf in 'x'
+# Therefore, we use glm2 which is more stable.
+fit_glm_gamma <- glm2(reformulate(x_vars, y_var), data = train, 
+                      family = Gamma(link = "log"))
+summary(fit_glm_gamma)
+
+glm_gamma_predict <- function(X) {
+  predict(fit_glm_gamma, X, type = "response")
+}
+
+# Same with bias correction
+corr_fact_glm <- mean(y_train) / mean(glm_gamma_predict(train)) 
+
+glm_gamma_corr_predict <- function(X){
+  corr_fact_glm * predict(fit_glm_gamma, X, type = "response")
+}
+```
+
+### Poisson GLM
+
+```{r}
+# Quasi-Poisson instead of Poisson suppresses warnings for non-integer y
+fit_glm_poisson <- glm(
+  reformulate(x_vars, y_var), data = train, family = quasipoisson
+)
+summary(fit_glm_poisson)
+
+glm_poisson_predict <- function(X){
+  predict(fit_glm_poisson, X, type = "response")
+}
+```
+
+### XGBoost
+
+Resonable choices for XGBoost's hyperparameters are provided in the grid search table stored as "grid/grid_xgb.RData". Thus, there is no need for retuning those parameters.
+
+```{r}
+# Data interface
+dtrain <- xgb.DMatrix(data.matrix(train[, x_vars]), label = y_train)
+
+# Settings
+tune <- FALSE
+file_grid <- "grid/grid_xgb.RData"
+
+if (tune) {
+  # Step 1: find good learning rate
+  xgb.cv(
+    list(learning_rate = 0.03),
+    dtrain,
+    nrounds = 5000,
+    tree_method = "hist",
+    nfold = 5,
+    objective = "reg:gamma",
+    showsd = FALSE,
+    early_stopping_rounds = 20,
+    verbose = 2
+  )
+  
+  # Step 2: Grid search CV on typical parameter combos
+  paramGrid <- expand.grid(
+    iteration = NA,
+    score = NA,
+    learning_rate = 0.03,
+    max_depth = 4:6,
+    min_child_weight = c(0, 1e-04),
+    colsample_bynode = c(0.8, 1),
+    subsample = c(0.8, 1),
+    reg_lambda = 0:2,
+    reg_alpha = 0:2,
+    tree_method = "hist",
+    eval_metric = "gamma-nloglik"
+  )
+  if (nrow(paramGrid) > 20) {
+    set.seed(342267)
+    paramGrid <- paramGrid[sample(nrow(paramGrid), 20), ]
+  }
+  
+  for (i in seq_len(nrow(paramGrid))) {
+    print(i)
+    cvm <- xgb.cv(
+      as.list(paramGrid[i, -(1:2)]),
+      dtrain,
+      nrounds = 5000,
+      nfold = 5,
+      objective = "reg:gamma",
+      showsd = FALSE,
+      early_stopping_rounds = 20,
+      verbose = 0
+    )
+    
+    paramGrid[i, 1] <- bi <- cvm$best_iteration
+    paramGrid[i, 2] <- cvm$evaluation_log[bi, "test_gamma_nloglik_mean"] %>% 
+      as.numeric()
+    save(paramGrid, file = file_grid)
+  }
+}
+load(file_grid, verbose = TRUE)
+
+# Step 3: Fit on best params
+head(paramGrid <- paramGrid[order(paramGrid$score), ])
+params <- paramGrid[1, ]
+
+set.seed(93845)
+fit_xgb <- xgb.train(
+  as.list(params[, -(1:2)]),
+  data = dtrain,
+  nrounds = params$iteration,
+  objective = "reg:gamma"
+)
+
+# Predict wrapper for xgb model
+xgb_predict <- function(newdata, x = x_vars) {
+  predict(fit_xgb, data.matrix(newdata[, x]))
+}
+
+# Same with bias correction
+corr_fact_xgb <- mean(y_train) / mean(xgb_predict(train))
+
+xgb_corr_predict <- function(newdata, x = x_vars) {
+  corr_fact_xgb * predict(fit_xgb, data.matrix(newdata[, x]))
+}
+
+# feature importance, helps to select features for calibration analysis
+importanceRaw <- xgb.importance(model = fit_xgb)
+xgb.plot.importance(importance_matrix = importanceRaw)
+```
+
+## Calibration assessment
+
+### Unconditional calibration in terms of bias
+
+```{r}
+model_levels <- c("trivial", "ols", "ols_corr", "glm_gamma",
+                  "glm_gamma_corr", "glm_poisson", "xgb", "xgb_corr")
+
+df_cali <- df %>% 
+  mutate(
+    prediction_trivial = trivial_predict(.),
+    prediction_ols = ols_predict(.),
+    prediction_ols_corr = ols_corr_predict(.),
+    prediction_glm_gamma = glm_gamma_predict(.),
+    prediction_glm_gamma_corr = glm_gamma_corr_predict(.),
+    prediction_glm_poisson = glm_poisson_predict(.),
+    prediction_xgb = xgb_predict(.),
+    prediction_xgb_corr = xgb_corr_predict(.)
+  ) %>% 
+  pivot_longer(
+    cols = starts_with("prediction"),
+    names_to = "model",
+    names_prefix = "prediction_",
+    values_to = "prediction"
+  ) %>% 
+  mutate(
+    bias = prediction - UltimateIncurredClaimCost,
+    model = factor(model, model_levels)
+  )
+
+# Unconditional calibration
+df_cali %>% 
+  group_by(dataset, model) %>% 
+  summarise(
+    mean_bias = num(mean(bias), digits = 0),
+    p_value = num(t.test(bias)$p.value, sigfig = 2),
+    .groups = "drop"
+  )
+```
+
+### Auto-calibration
+
+Visualized differently on train and test.
+
+```{r}
+df_cali %>% 
+  filter(dataset == "train") %>%
+# sample_n(10000) %>% 
+ggplot(aes(x = prediction, y = bias)) +
+  geom_hex(bins = 23, show.legend = TRUE) +
+  geom_smooth(
+    method = "gam", 
+    formula = y ~ s(x, bs = "cr", k = 20), 
+    se = FALSE
+  ) +
+  scale_fill_viridis_c(option = "magma", trans = "log10") +
+  facet_wrap(~ model) +
+  theme(legend.position = c(0.9, 0), legend.justification = c(1, 0)) +
+  ggtitle("Bias (negative residuals) vs predicted (training set)")
+
+# Smoothed curve on test
+df_cali %>% 
+  filter(dataset == "test", prediction <= 1e5) %>% 
+ggplot(aes(x = prediction, y = bias, linetype = model, color = model)) +
+  geom_smooth(
+    method = "gam", 
+    formula = y ~ s(x, bs = "cr", k = 20), 
+    se = FALSE
+  ) +
+  coord_cartesian(ylim = c(-2e4, 2e4)) +
+  ggtitle("Bias (negative residuals) vs predicted (test set)")
+
+# Table for test function phi = prediction
+df_cali %>% 
+  group_by(dataset, model) %>%
+  summarise(
+    bias = num(mean(prediction * bias), sigfig = 4, notation = "sci"),
+    .groups = "drop"
+  ) %>% 
+  pivot_wider(names_from = dataset, values_from = bias)
+```
+
+### Calibration conditional on Gender
+
+```{r}
+# Note: We want to divide by n_train and n_test and NOT by n(Gender=M) and n(Gender=F)
+df_cali %>% 
+  group_by(dataset, model) %>%
+  summarise(
+    F = mean(bias * (Gender == "F")),
+    M = mean(bias * (Gender == "M")),
+    .groups = "drop"
+  )
+```
+
+Bar plot of mean bias on the test set. The first plot for the two test functions
+$\phi(x) = 1\{Gender = F\}$ and $\phi(x) = 1\{Gender = M\}$ and
+the second one for evaluation of $\bar V$ stratified by gender.
+
+```{r}
+df_indicator <- df_cali %>%
+  filter(dataset == "test") %>% 
+  group_by(model) %>%
+  summarise(
+    F = mean(bias * (Gender == "F")),
+    M = mean(bias * (Gender == "M")),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(c("F", "M"), names_to = "Gender", values_to = "mean bias") %>% 
+  mutate(type = "whole sample")
+
+df_strat <- df_cali %>% 
+  filter(dataset == "test") %>% 
+  group_by(model, Gender) %>% 
+  summarise(`mean bias` = mean(bias), .groups = "drop") %>% 
+  mutate(type = "subsample per Gender")
+
+df_indicator %>% 
+  bind_rows(df_strat) %>%
+  ggplot(aes(x = Gender, y = `mean bias`, group = model, color = model)) +
+  geom_point(size = 3, position = position_dodge(width = 0.3), alpha = 0.7) +
+  facet_wrap(~ fct_rev(type)) +
+  ggtitle("Mean bias by Gender (test set)")
+```
+
+### Calibration conditional on LogWeeklyPay 
+
+`LogWeeklyPay` is the second most important feature after the initial claim reserve estimate.
+
+```{r}
+# Binning of LogWeeklyPay in 10 quantiles
+# Use mean of quantile as x-value
+breaks <- unique(quantile(df$LogWeeklyPay, (0:10) / 10))
+midpoints <- (breaks[-length(breaks)] + breaks[-1]) / 2
+
+df_binned <- df_cali %>% 
+  mutate(
+    LogWeeklyPayBinned = midpoints[
+      cut(LogWeeklyPay, breaks, include.lowest = TRUE, labels = FALSE)
+    ],
+    WeeklyPayBinned = exp(LogWeeklyPayBinned) - 1
+  )
+
+p1 <- df_binned %>% 
+  group_by(dataset, model, WeeklyPayBinned) %>%
+  summarise(bias = sum(bias), .groups = "drop") %>% 
+  mutate(
+    bias = bias / case_when(
+      dataset=="train" ~ nrow(train),
+      dataset=="test" ~ nrow(test)
+    )
+  ) %>% 
+ggplot(aes(x = WeeklyPayBinned, y = bias, color = model, group = model)) +
+  geom_line() +
+  geom_point() +
+  scale_x_log10() +
+  facet_wrap(~ dataset) +
+  ylab("mean bias") +
+  ggtitle("Mean bias on whole sample") +
+  theme(plot.title = element_text(size = 12))
+
+p2 <- df_binned %>% 
+  group_by(dataset, model, WeeklyPayBinned) %>%
+  summarise(bias = mean(bias), .groups = "drop") %>% 
+ggplot(aes(x = WeeklyPayBinned, y = bias, color = model, group = model)) +
+  geom_line() +
+  geom_point() +
+  scale_x_log10() +
+  facet_wrap(~ dataset) +
+  ylab("mean bias") +
+  ggtitle("Mean bias per sample in bin") +
+  theme(plot.title = element_text(size = 12))
+
+p1 / p2 +
+  plot_layout(guides = "collect") +
+  plot_annotation(title = "Mean bias on binned LogWeeklyPay")
+
+# Test function = LogWeeklyPay
+with_options(
+  list(scipen = 3, pillar.sigfig = 0),
+  df_cali %>% 
+    group_by(dataset, model) %>%
+    summarise(calib_test = mean(LogWeeklyPay * bias), .groups = "drop") %>% 
+    pivot_wider(names_from = dataset, values_from = calib_test)
+)
+```
+
+## Model comparison
+
+### Compare absolute and relative performance scores
+
+```{r}
+# Function returns two relevant mean Gamma deviance and corresponding D2
+perf <- function(X, actual, predicted, ref) {
+  act <- X[[actual]]
+  pred <- X[[predicted]]
+  tibble(
+    Measure = c("Mean deviance", "D-Squared"),
+    Score = c(`Mean deviance` = deviance_gamma(act, pred), 
+              `D-Squared` = r_squared_gamma(act, pred, reference_mean = ref))
+  )
+}
+
+# Apply it to combinations of dataset and model
+df_perf <- df_cali %>% 
+  group_by(dataset, model) %>% 
+  summarize(
+    perf(cur_data(), y_var, "prediction", mean(y_train)), 
+    .groups = "drop"
+  )
+
+df_perf %>% 
+  pivot_wider(
+    "model", 
+    names_from = c("Measure", "dataset"), 
+    values_from = "Score", names_sort = TRUE
+  )
+
+ggplot(df_perf, aes(y = Score, x = dataset, color = model, group = model)) +
+  geom_point(size = 2) +
+  geom_line() +
+  facet_wrap(~ Measure, scales = "free")
+```
+
+### Murphy diagram (for elementary score)
+
+```{r}
+df_murphy <- df_cali %>% 
+  filter(!(model %in% c("trivial", "ols"))) %>% 
+  group_by(dataset, model) %>% 
+  summarize(
+    murphy_diagram(
+      cur_data()[[y_var]], 
+      cur_data()$prediction, 
+      plot = FALSE, 
+      theta = exp(seq(log(10000), log(1.7e5), by = 0.02))
+    ),
+    .groups = "drop"
+  ) %>% 
+  rename(Score = predicted)
+
+# Vertical line is the mean y on the training data (for both graphs)
+ggplot(df_murphy, aes(y = Score, x = theta)) +
+  geom_line(aes(color = model, linetype = model, group = model), size = 0.75) +
+  geom_vline(xintercept = mean(train[[y_var]]), linetype = 2, size = 0.75) +
+  facet_wrap(~ dataset, scales = "free", ncol = 2) +
+  scale_x_log10() +
+  theme(legend.title = element_blank())
+```
+
+### Murphy-type diagram (for Tweedie p)
+
+```{r}
+df_tweedie <- df_cali %>% 
+  filter(!(model %in% c("trivial", "ols"))) %>% 
+  group_by(dataset, model) %>% 
+  summarize(
+    performance(
+      cur_data(), 
+      actual = y_var, 
+      predicted = "prediction", 
+      metrics = multi_metric(deviance_tweedie, tweedie_p = seq(1, 3, by = 0.05)), 
+      key = "Tweedie_p", 
+      value = "Deviance"
+    ),
+    .groups = "drop"
+  ) %>% 
+  mutate(
+    Tweedie_p = as.numeric(as.character(Tweedie_p)),
+    Deviance_rescaled = Deviance * mean(df_cali[[y_var]])^(Tweedie_p-2)
+  )
+
+ggplot(df_tweedie, aes(y = Deviance_rescaled, x = Tweedie_p)) +
+  geom_line(aes(color = model, linetype = model, group = model), size = 0.75) +
+  facet_wrap(~ dataset, scales = "free", ncol = 2) +
+  scale_y_log10() +
+  theme(legend.title = element_blank())
+```
+
+
+# Binary Classification Example
+
+The classification example is based on the "Telco Customer Churn" dataset on [OpenML](https://www.openml.org/d/42178). We will model churn probability as a function of a couple of features.
+
+## Attach all packages and fetch data
+
+The dataset is being downloaded and then stored on disk for reuse.
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(hexbin)
+library(MetricsWeighted)
+library(ranger)
+library(xgboost)
+library(arrow)
+library(ggcorrplot)
+library(patchwork)
+library(scales)
+library(withr)
+library(splitTools)
+library(reliabilitydiag)
+
+if (!file.exists("churn.parquet")) {
+  library(OpenML)
+
+  df_origin <- getOMLDataSet(data.id = 42178)
+  df <- tibble(df_origin$data)
+  write_parquet(df, "churn.parquet")
+} else {
+  df <- read_parquet("churn.parquet")
+}
+```
+
+## Data preparation
+
+```{r}
+df[df == "No internet service" | df == "No phone service"] <- "No"
+
+df <- df %>%
+  mutate(
+    LogTotalCharges = log(as.numeric(TotalCharges)),
+    Churn = (Churn == "Yes") + 0,
+  ) %>% 
+  replace_na(
+    list(LogTotalCharges = median(.$LogTotalCharges, na.rm = TRUE))
+  ) %>% 
+  mutate_if(is.character, as.factor)
+
+y_var <- "Churn"
+x_continuous <- c("tenure", "MonthlyCharges", "LogTotalCharges")
+x_discrete <- setdiff(
+  colnames(select_if(df, is.factor)), c("customerID", y_var, "TotalCharges")
+)
+x_vars <- c(x_continuous, x_discrete)
+
+df[c(y_var, x_vars)]
+```
+
+## Exploratory data analysis
+
+### Univariate description of target
+
+```{r}
+table(df[[y_var]], useNA = "ifany")
+```
+
+### Univariate description
+
+```{r}
+# Univariate description
+df %>%
+  select_at(x_continuous) %>%
+  pivot_longer(everything()) %>%
+  mutate(name = factor(name, levels = x_continuous)) %>%
+ggplot(aes(x = value)) +
+  geom_histogram(bins = 19, fill = "#E69F00") +
+  facet_wrap(~name, scales = "free", ncol = 3) +
+  labs(y = element_blank()) +
+  theme(
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) +
+  ggtitle("Histograms of numerical features")
+
+df %>%
+  select_at(x_discrete) %>%
+  mutate_all(as.character) %>% 
+  pivot_longer(everything()) %>%
+  mutate(
+    name = factor(name, levels = x_discrete),
+    value = factor(value)
+  ) %>%
+ggplot(aes(x = value)) +
+  geom_bar(fill = "#E69F00") +
+  facet_wrap(~ name, scales = "free", ncol = 3) +
+  labs(y = "Count") +
+  ggtitle("Barplots of categorical features")
+```
+
+### Correlations across continuous covariates
+
+```{r}
+df %>%
+  select_at(x_continuous) %>%
+  cor() %>%
+  round(2) %>%
+  ggcorrplot(
+    hc.order = FALSE,
+    type = "upper",
+    outline.col = "white",
+    ggtheme = theme_minimal(),
+    colors = c("#6D9EC1", "white", "#E46726")
+  )
+```
+
+### Response in dependence of covariates
+
+```{r}
+# Response in dependence of covariates
+df_cat <- df %>% 
+  select(all_of(x_discrete), all_of(y_var)) %>%
+  mutate(across(-all_of(y_var), as.factor)) %>% 
+  pivot_longer(cols = -all_of(y_var)) %>% 
+  group_by(name, value) %>% 
+  summarize(Churn = mean(Churn), .groups="drop")
+
+ggplot(df_cat, aes_string("value", y_var)) +
+  geom_point(color = "orange", size = 3) +
+  facet_wrap(~ name, scales = "free_x") +
+  scale_y_log10() +
+  xlab(element_blank()) +
+  ggtitle("Mean churn per categorical level")
+
+df_num <- df %>% 
+  select(all_of(x_continuous), all_of(y_var)) %>% 
+  pivot_longer(cols = -all_of(y_var))
+
+ggplot(df_num, aes_string("value", y = y_var)) +
+  geom_smooth() +
+  facet_wrap(~ name, scales = "free") +
+  xlab(element_blank())
+```
+
+## Data split
+
+Next, we split our dataset into training and test/validation data, stratified by the response.
+
+```{r}
+set.seed(34621L)
+inds <- partition(df$Churn, p = c(train = 0.75, test = 0.25))
+
+train <- df[inds$train, ]
+test <- df[inds$test, ]
+y_train <- train[[y_var]]
+y_test <- test[[y_var]]
+
+df <- df %>% 
+  mutate(dataset = factor(c("test"), c("train", "test")))
+df$dataset[inds$train] <- "train"
+
+df %>% 
+  group_by(dataset) %>% 
+  summarise(mean(Churn), .groups="drop")
+```
+
+## The models
+
+### Trivial Model
+
+```{r}
+trivial_predict <- function(X) {
+  mean(y_train) * rep(1, dim(X)[1])
+}
+```
+
+### Logistic regression
+
+```{r}
+form <- reformulate(x_vars, y_var)
+fit_glm <- glm(form, data = train, family = binomial())
+summary(fit_glm)
+r_squared_bernoulli(
+  y_test, 
+  predict(fit_glm, test, type = "response"), 
+  reference_mean = mean(y_train)
+)
+```
+
+### Random forest
+
+```{r}
+fit_rf <- ranger(
+  form, 
+  data = train, 
+  probability = TRUE, 
+  seed = 774, 
+  min.node.size = 30, 
+  oob.error = TRUE
+)
+fit_rf
+```
+
+### XGBoost
+
+Resonable choices for XGBoost's hyperparameters are provided in the grid search table stored as "grid/c_grid_xgb.RData". Thus, there is no need for retuning those parameters.
+
+```{r}
+# Data interface
+dtrain <- xgb.DMatrix(data.matrix(train[, x_vars]), label = y_train)
+
+# Settings
+tune <- FALSE
+file_grid <- "grid/c_grid_xgb.RData"
+
+if (tune) {
+  # Step 1: find good learning rate
+  xgb.cv(
+    list(learning_rate = 0.01),
+    dtrain,
+    nrounds = 5000,
+    nfold = 5,
+    objective = "binary:logistic",
+    showsd = FALSE,
+    early_stopping_rounds = 20,
+    verbose = 2
+  )
+  
+  # Step 2: Grid search CV on typical parameter combos
+  paramGrid <- expand.grid(
+    iteration = NA,
+    score = NA,
+    learning_rate = 0.01,
+    max_depth = 3:6,
+    min_child_weight = c(0, 1e-04),
+    colsample_bynode = c(0.8, 1),
+    subsample = c(0.8, 1),
+    reg_lambda = 0:2,
+    reg_alpha = 0:2,
+    eval_metric = "logloss"
+  )
+  if (nrow(paramGrid) > 20) {
+    set.seed(342267)
+    paramGrid <- paramGrid[sample(nrow(paramGrid), 20), ]
+  }
+  
+  for (i in seq_len(nrow(paramGrid))) {
+    print(i)
+    cvm <- xgb.cv(
+      as.list(paramGrid[i, -(1:2)]),
+      dtrain,
+      nrounds = 5000,
+      nfold = 5,
+      objective = "binary:logistic",
+      showsd = FALSE,
+      early_stopping_rounds = 20,
+      verbose = 0
+    )
+    
+    paramGrid[i, 1] <- bi <- cvm$best_iteration
+    paramGrid[i, 2] <- cvm$evaluation_log[bi, "test_logloss_mean"] %>% 
+      as.numeric()
+    save(paramGrid, file = file_grid)
+  }
+}
+load(file_grid, verbose = TRUE)
+
+# Step 3: Fit on best params
+head(paramGrid <- paramGrid[order(paramGrid$score), ])
+params <- paramGrid[1, ]
+
+set.seed(76)
+fit_xgb <- xgb.train(
+  as.list(params[, -(1:2)]),
+  data = dtrain,
+  nrounds = params$iteration,
+  objective = "binary:logistic"
+)
+
+# Predict wrapper for xgb model
+xgb_predict <- function(newdata, x = x_vars) {
+  predict(fit_xgb, data.matrix(newdata[, x]))
+}
+
+# feature importance
+importanceRaw <- xgb.importance(model = fit_xgb)
+xgb.plot.importance(importance_matrix = importanceRaw)
+```
+
+## Calibration assessment
+
+### Unconditional calibration in terms of bias
+
+```{r}
+model_levels <- c("trivial", "logreg", "rf", "xgb")
+
+df_cali <- df %>% 
+  mutate(
+    prediction_trivial = trivial_predict(.),
+    prediction_logreg = predict(fit_glm, ., type = "response"),
+    prediction_rf = predict(fit_rf, .)$predictions[, 2],
+    prediction_xgb = xgb_predict(.)
+  ) %>% 
+  pivot_longer(
+    cols = starts_with("prediction"),
+    names_to = "model",
+    names_prefix = "prediction_",
+    values_to = "prediction"
+  ) %>% 
+  mutate(
+    bias = prediction - Churn,
+    model = factor(model, model_levels)
+  )
+
+# Unconditional calibration
+df_cali %>% 
+  group_by(dataset, model) %>% 
+  summarise(Mean_bias = mean(bias), .groups = "drop") %>% 
+  mutate(Mean_bias = zapsmall(Mean_bias)) %>% 
+  pivot_wider(
+    id_cols = "model", 
+    names_from = "dataset", 
+    values_from = "Mean_bias"
+  )
+```
+
+
+### Reliability diagram for assessment of auto-calibration
+
+```{r}
+reldiag <- reliabilitydiag(
+  logreg = filter(df_cali, model == "logreg", dataset == "test")$prediction,
+  rf = filter(df_cali, model == "rf", dataset == "test")$prediction,
+  xgb = filter(df_cali, model == "xgb", dataset == "test")$prediction,
+  y = y_test,
+  xtype = "continuous",
+  region.level = NA
+)
+
+# Get decomposition of log loss score => does not work
+log_loss_score <- function(obs, pred){
+  ifelse(((obs==0 & pred==0) | (obs==1 & pred==1)),
+         0,
+         -obs * log(pred) - (1 - obs) * log(1 - pred))
+}
+
+# Score decomposition of log loss
+log_loss_decomp_text <- summary(reldiag, score = "log_loss_score") %>% 
+  mutate(
+    text = paste0(
+      "MCB = ", format(miscalibration, digits = 3), "\n",
+      "DSC = ", format(discrimination, digits = 3), "\n",
+      "UNC = ", format(uncertainty, digits = 3)
+    )
+  )
+
+autoplot(
+    reldiag,
+    params_CEPline = list(size = 0.5),
+    params_histogram = list(colour = "black", fill = NA)
+  ) +
+  facet_wrap("forecast") +
+  ggtitle("Reliability diagrams (test set)") +
+  guides(
+    color = guide_legend(title = "model"), 
+    linetype = guide_legend(title = "model")
+  ) +
+  geom_label(
+    data = log_loss_decomp_text,
+    mapping = aes(x = 0.0, y = 1, label = text),
+    size = 3, 
+    hjust = "left", 
+    vjust = "top"
+  )
+```
+
+## Model comparison
+
+### Compare different scoring functions
+
+```{r}
+# Function returns two relevant mean Gamma deviance and corresponding D2
+# Note: Bernoulli deviance = 2 * logloss
+perf <- function(X, actual, predicted, ref) {
+  act <- X[[actual]]
+  pred <- X[[predicted]]
+  tibble(
+    Score = c(
+      `log loss` = logLoss(act, pred), 
+      `D-Squared` = r_squared_bernoulli(act, pred, reference_mean = ref),
+      AUC = AUC(act, pred)
+    ),
+  ) %>% 
+  mutate(Measure = factor(names(Score), names(Score)))
+}
+
+# Apply it to combinations of dataset and model
+df_perf <- df_cali %>% 
+  group_by(dataset, model) %>% 
+  summarize(
+    perf(cur_data(), y_var, "prediction", mean(y_train)), 
+    .groups = "drop"
+  )
+
+df_perf_for_text <- df_perf %>% 
+  mutate(Score = num(Score, digits = 3)) %>% 
+  pivot_wider(
+    "model", 
+    names_from = c("Measure", "dataset"), 
+    values_from = "Score", 
+    names_sort = TRUE
+  )
+
+df_perf %>% 
+  filter(Measure != "AUC") %>% 
+ggplot(aes(y = Score, x = dataset, color = model, group = model)) +
+  geom_point(size = 2) +
+  geom_line() +
+  facet_wrap(~ Measure, scales = "free")
+```
+
+### Murphy diagram for elementary score
+
+```{r}
+df_murphy <- df_cali %>% 
+  filter(!(model %in% c("trivial", "ols"))) %>% 
+  group_by(dataset, model) %>% 
+  summarize(
+    murphy_diagram(
+      cur_data()[[y_var]], 
+      cur_data()$prediction, 
+      plot = FALSE, 
+      theta = seq(0, 1, by = 0.02)
+    ),
+    .groups = "drop"
+  ) %>% 
+  rename(Score = predicted)
+
+# Vertical line is the mean y on the training data (for both graphs)
+ggplot(df_murphy, aes(y = Score, x = theta)) +
+  geom_line(aes(color = model, linetype = model, group = model), size = 0.75) +
+  geom_vline(xintercept = mean(train[[y_var]]), linetype = 2, size = 0.75) +
+  facet_wrap(~ dataset, scales = "free", ncol = 2) +
+  theme(legend.position = c(0.25, 0.2), legend.title = element_blank())
+```
+
+
+# Session Info
+
+The html is generated with the follow packages (slightly newer than the ones used in the published tutorial).
+
+```{r}
+sessionInfo()
+```
