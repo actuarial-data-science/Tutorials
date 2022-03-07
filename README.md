@@ -41,3 +41,7 @@ Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3656210
 
 Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3900350
 
+## 11 - Model Comparison and Calibration Assessment
+
+Article: https://arxiv.org/abs/2202.12780
+
