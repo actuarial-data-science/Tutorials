@@ -45,3 +45,6 @@ Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3900350
 
 Article: https://arxiv.org/abs/2202.12780
 
+## 12 - Actuarial Applications of Natural Language Processing Using Transformers
+
+Article: https://arxiv.org/abs/2206.02014
