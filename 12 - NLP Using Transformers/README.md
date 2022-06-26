@@ -11,5 +11,5 @@ Here you find the Python notebooks for the article [Actuarial Applications of Na
 
 ### Data
 - NHTSA_NMVCCS_extract.parquet.gzip
-- peril.training.csv
-- peril.validation.csv
+- peril.training.csv (copy of the original data from [here](https://github.com/OpenActTexts/Loss-Data-Analytics/tree/master/Data))
+- peril.validation.csv (copy of the original data from [here](https://github.com/OpenActTexts/Loss-Data-Analytics/tree/master/Data))
