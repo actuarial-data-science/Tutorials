@@ -10,6 +10,6 @@ Here you find the Python notebooks for the article [Actuarial Applications of Na
 - tutorial_utils.py
 
 ### Data
-- NHTSA_NMVCCS_extract.parquet.gzip
+- NHTSA_NMVCCS_extract.parquet.gzip (original data availabel [here](https://www.nhtsa.gov/node/97996/2926))
 - peril.training.csv (copy of the original data from [here](https://github.com/OpenActTexts/Loss-Data-Analytics/tree/master/Data))
 - peril.validation.csv (copy of the original data from [here](https://github.com/OpenActTexts/Loss-Data-Analytics/tree/master/Data))
