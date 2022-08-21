@@ -8,7 +8,7 @@ import plotly.express as px
 
 
 # apply the NLP model to tokenized inputs, extract last hidden states, and return one tensor per input sample
-def extract_sequence_encoding(batch, model):
+def extract_sequence_encoding(batch, model, normalize=False):
     input_ids = torch.tensor(batch["input_ids"]).to(model.device)
     attention_mask = torch.tensor(batch["attention_mask"]).to(model.device)
     with torch.no_grad():
@@ -17,7 +17,10 @@ def extract_sequence_encoding(batch, model):
         last_hidden_state = model_output.last_hidden_state
 
         # extract the tensor corresponding to the CLS token, i.e. the first element in the encoded sequence
-        batch["cls_hidden_state"] = last_hidden_state[:,0,:].cpu().numpy()
+        v = last_hidden_state[:,0,:].cpu().numpy()
+        if normalize:
+            v = v / np.linalg.norm(v, axis=-1)[:, None]
+        batch["cls_hidden_state"] = v
 
         # mean pooling: take average over input sequence, but mask sequence elements corresponding to the PAD token
         last_hidden_state = last_hidden_state.cpu().numpy()
@@ -26,7 +29,10 @@ def extract_sequence_encoding(batch, model):
         boolean_mask = np.repeat(boolean_mask, lhs_shape[-1], axis=-1)
         boolean_mask = boolean_mask.reshape(lhs_shape)
         masked_mean = np.ma.array(last_hidden_state, mask=boolean_mask).mean(axis=1)
-        batch["mean_hidden_state"] = masked_mean.data
+        v = masked_mean.data
+        if normalize:
+            v = v / np.linalg.norm(v, axis=-1)[:, None]
+        batch["mean_hidden_state"] = v
     return batch
 
 
