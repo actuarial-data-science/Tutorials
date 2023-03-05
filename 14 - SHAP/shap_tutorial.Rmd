@@ -38,9 +38,8 @@ library(keras)       # 2.11.0
 library(lightgbm)    # 3.3.5
 
 # SHAP
-library(shapviz)     # 0.5.1
+library(shapviz)     # 0.6.0
 library(kernelshap)  # 0.3.4
-
 
 df <- read_parquet("rdata/df.parquet")
 
@@ -65,11 +64,8 @@ y <- "claim_nb"
 x <- c("year", "town", "driver_age", "car_weight", "car_power", "car_age")
 
 train <- df[ix, ]
-test <- df[-ix, ]
 y_train <- train[[y]]
-y_test <- test[[y]]
 X_train <- data.matrix(train[x])
-X_test <- data.matrix(test[x])
 ```
 
 ## Generalized linear model (GLM)
@@ -228,7 +224,7 @@ sv_importance(shap_lgb, kind = "bee")
 
 ```{r}
 for (xvar in x) {
-  (sv_dependence(shap_lgb, xvar, color_var = "auto", alpha = 0.5) + 
+  (sv_dependence(shap_lgb, xvar, alpha = 0.5) + 
     ggtitle(xvar) +
     ylim(-0.5, 1.05)) %>% 
   print()
@@ -237,7 +233,7 @@ for (xvar in x) {
 
 ## GLM
 
-For all other models, including our GLM, we use model-agnostic Kernel SHAP, and focus on SHAP dependence plots.
+For all other models, including our GLM, we use model-agnostic Kernel SHAP, and focus on SHAP dependence plots. (Setting `verbose = FALSE` suppresses the progress bar - it does not play well with R Markdown).
 
 ```{r}
 system.time(
@@ -245,7 +241,7 @@ system.time(
 )
 
 for (xvar in x) {
-  (sv_dependence(shap_glm, xvar, color_var = "auto", alpha = 0.5) + 
+  (sv_dependence(shap_glm, xvar, alpha = 0.5) + 
     ggtitle(xvar) +
     ylim(-0.5, 1.05)) %>% 
   print()
@@ -253,8 +249,6 @@ for (xvar in x) {
 ```
 
 ## Neural net
-
-For the remaining models, we show only dependence plots.
 
 ```{r}
 # Function that maps data.frame to neural net input and calculates (log) predictions
@@ -273,7 +267,7 @@ system.time(
 
 # Dependence plots
 for (xvar in x) {
-  (sv_dependence(shap_nn, xvar, color_var = "auto", alpha = 0.5) + 
+  (sv_dependence(shap_nn, xvar, alpha = 0.5) + 
     ggtitle(xvar) +
     ylim(-0.5, 1.05)) %>% 
   print()
@@ -296,7 +290,7 @@ system.time(
 )
 
 for (xvar in x) {
-  (sv_dependence(shap_truth, xvar, color_var = "auto", alpha = 0.5) + 
+  (sv_dependence(shap_truth, xvar, alpha = 0.5) + 
     ggtitle(xvar) +
     ylim(-0.5, 1.05)) %>% 
   print()
