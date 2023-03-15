@@ -1,0 +1,298 @@
+---
+title: "SHAP Tutorial"
+date: "2023-03-02"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+    df_print: paged
+    theme: paper
+    math_method: katex
+knit: (function(input, ...) {rmarkdown::render(input, output_dir = "docs")})
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, 
+  warning = FALSE,
+  message = FALSE,
+  eval = TRUE
+)
+```
+
+
+This accompanying notebook produces selected results from the tutorial, with the aim of showing how SHAP is used in practice. The results might slightly differ from those in the tutorial, and the plots are organized differently.
+
+# Load and inspect data
+
+```{r}
+# Data
+library(arrow)       # 10.0.1
+library(withr)       # 2.5.0
+library(tidyverse)   # 1.3.2
+
+# Models
+library(caret)       # 6.0-93
+library(keras)       # 2.11.0
+library(lightgbm)    # 3.3.5
+
+# SHAP
+library(shapviz)     # 0.6.0
+library(kernelshap)  # 0.3.4
+
+df <- read_parquet("rdata/df.parquet")
+
+dim(df)
+head(df)
+summary(df)
+```
+
+# Modeling
+
+In this section, we split the data into 90% training and 10% test observations, and fit the three statistical models. Furthermore, we define the function that returns the true model values.
+
+## Data split
+
+```{r}
+with_seed(
+  8300, 
+  ix <- sample(nrow(df), 0.9 * nrow(df))
+)
+
+y <- "claim_nb"
+x <- c("year", "town", "driver_age", "car_weight", "car_power", "car_age")
+
+train <- df[ix, ]
+y_train <- train[[y]]
+X_train <- data.matrix(train[x])
+```
+
+## Generalized linear model (GLM)
+
+We start by fitting a (naive) additive linear Poisson regression model.
+
+```{r}
+(fit_glm <- glm(reformulate(x, y), data = train, family = poisson()))
+```
+
+## Deep neural net
+
+We use TensorFlow to fit the deep neural net.
+
+```{r}
+# Standardization
+scaler <- preProcess(X_train, method = "range", rangeBounds = c(-1, 1))
+
+# Callbacks
+cb <- list(
+  callback_early_stopping(patience = 20),
+  callback_reduce_lr_on_plateau(patience = 5)
+)
+
+# Architecture
+make_nn <- function() {
+  k_clear_session()
+  tensorflow::set_random_seed(4349)
+  
+  input <- layer_input(length(x))
+  
+  output <- input %>%
+    layer_dense(units = 40, activation = "tanh") %>%
+    layer_dense(units = 20, activation = "tanh") %>% 
+    layer_dense(units = 10, activation = "tanh") %>%
+    layer_dense(units = 1, activation = "exponential")
+
+  keras_model(input, output)
+}
+
+# Create, compile and fit model
+fit_nn <- make_nn() %>% 
+  compile(optimizer = optimizer_adam(learning_rate = 1e-4), loss = loss_poisson)
+
+summary(fit_nn)
+
+history <- fit_nn %>%
+  fit(
+    x = predict(scaler, X_train), 
+    y = y_train,
+    epochs = 200, 
+    batch_size = 1e4,
+    validation_split = 0.1,
+    callbacks = cb,
+    verbose = 0
+  )
+plot(history, metrics = "loss")
+```
+
+## LightGBM
+
+To fit a boosted trees model, we use LightGBM. The parameters have been tuned outside this script by combining early-stopping with random parameter search cross-validation.
+
+```{r}
+dtrain <- lgb.Dataset(
+  X_train,
+  label = y_train,
+  params = list(feature_pre_filter = FALSE)
+)
+
+params <- list(
+  learning_rate = 0.05, 
+  objective = "poisson", 
+  metric = "poisson", 
+  num_leaves = 7, 
+  min_data_in_leaf = 50, 
+  min_sum_hessian_in_leaf = 0.001, 
+  colsample_bynode = 0.8, 
+  bagging_fraction = 0.8, 
+  lambda_l1 = 3, 
+  lambda_l2 = 5, 
+  num_threads = 7
+)
+
+fit_lgb <- lgb.train(params = params, data = dtrain, nrounds = 300)  
+```
+
+## True model
+
+Since we use simulated data, the true underlying frequency model is known:
+
+```{r}
+age_effect <- function(age) {
+  x <- (age - 66) / 60
+  0.05 + x^8 + 0.4*x^3 + 0.3*x^2 + 0.06*x
+}
+
+true_model <- function(df) {
+  log_lambda <- with(
+    df, 
+    0 +
+      0.15 * town + 
+      + log(age_effect(driver_age)) +
+      (0.3 + 0.15 * town) * car_power / 100 +  # interaction 1
+    #  0.1 * car_power / (car_weight / 100)^2 + # interaction 2
+      -0.02 * car_age
+  )
+  exp(log_lambda)
+}
+
+# Check
+true_model(head(df))
+```
+
+# SHAP analysis
+
+Let's analyze our models with SHAP.
+
+## Preparations
+
+The first steps in the SHAP analysis is to select a dataset of 1000 rows to be explained. Furthermore, for model-agnostic Kernel SHAP, we additionally sample a smaller dataset, serving as background data for integrating out marginal means.
+
+```{r}
+with_seed(
+  3948, {
+    X_explain <- train[sample(nrow(train), 1000), x]
+    bg <- train[sample(nrow(train), 200), ]
+  }
+)
+```
+
+## TreeSHAP
+
+Let's explain our LightGBM model with the extremely efficient TreeSHAP algorithm.
+
+```{r}
+system.time(
+  shap_lgb <- shapviz(fit_lgb, X_pred = data.matrix(X_explain))  
+)
+```
+
+### Waterfall plot of first observation
+
+```{r}
+sv_waterfall(shap_lgb, row_id = 1)
+```
+
+### SHAP importance: Barplot and summary plot
+
+```{r}
+sv_importance(shap_lgb, show_numbers = TRUE)
+sv_importance(shap_lgb, kind = "bee")
+```
+
+### SHAP dependence plots
+
+```{r}
+for (xvar in x) {
+  (sv_dependence(shap_lgb, xvar, alpha = 0.5) + 
+    ggtitle(xvar) +
+    ylim(-0.5, 1.05)) %>% 
+  print()
+}
+```
+
+## GLM
+
+For all other models, including our GLM, we use model-agnostic Kernel SHAP, and focus on SHAP dependence plots. (Setting `verbose = FALSE` suppresses the progress bar - it does not play well with R Markdown).
+
+```{r}
+system.time(
+  shap_glm <- shapviz(kernelshap(fit_glm, X = X_explain, bg_X = bg, verbose = FALSE))
+)
+
+for (xvar in x) {
+  (sv_dependence(shap_glm, xvar, alpha = 0.5) + 
+    ggtitle(xvar) +
+    ylim(-0.5, 1.05)) %>% 
+  print()
+}
+```
+
+## Neural net
+
+```{r}
+# Function that maps data.frame to neural net input and calculates (log) predictions
+pred_nn_ln <- function(model, df) {
+  X <- data.matrix(df[x])
+  X_scaled <- predict(scaler, X)
+  log(predict(model, X_scaled, batch_size = 1e4, verbose = 0))
+}
+
+# Kernel SHAP
+system.time(
+  shap_nn <- shapviz(
+    kernelshap(fit_nn, X = X_explain, bg_X = bg, pred_fun = pred_nn_ln, verbose = FALSE)
+  )
+)
+
+# Dependence plots
+for (xvar in x) {
+  (sv_dependence(shap_nn, xvar, alpha = 0.5) + 
+    ggtitle(xvar) +
+    ylim(-0.5, 1.05)) %>% 
+  print()
+}
+```
+
+## True model
+
+```{r}
+system.time(
+  shap_truth <- shapviz(
+    kernelshap(
+      "truth", 
+      X = X_explain, 
+      bg_X = bg, 
+      pred_fun = function(m, X) log(true_model(X)), 
+      verbose = FALSE
+    )
+  )
+)
+
+for (xvar in x) {
+  (sv_dependence(shap_truth, xvar, alpha = 0.5) + 
+    ggtitle(xvar) +
+    ylim(-0.5, 1.05)) %>% 
+  print()
+}
+```

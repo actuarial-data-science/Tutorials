@@ -53,3 +53,7 @@ Article: https://arxiv.org/abs/2206.02014
 
 Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4248143
 
+## 14 - SHAP
+
+Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4389797
+
