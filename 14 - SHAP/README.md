@@ -13,3 +13,8 @@ Both codes use the following data:
 ## Data
 
 The folder "rdata" contains the Parquet file "df.parquet", representing 1 mio rows of synthetic (but realistic) claims frequency data.
+
+## Code output
+
+- Python: Click on the ipynb file
+- R: [shap.html](https://htmlpreview.github.io/?https://github.com/JSchelldorfer/ActuarialDataScience/blob/master/14%20-%20SHAP/shap.html) (please click on this link to preview html output; in order to see the table of contents properly, download the html and open it in your browser.)
