@@ -24,11 +24,15 @@ knitr::opts_chunk$set(
 
 This accompanying notebook produces selected results from the tutorial, with the aim of showing how SHAP is used in practice. The results might slightly differ from those in the tutorial, and the plots are organized differently.
 
+You can download the data from Github or from OpenML.
+
 # Load and inspect data
 
 ```{r}
 # Data
-library(arrow)       # 10.0.1
+library(farff)       # 1.1.1 (required by OpenML)
+library(OpenML)      # 1.12  (if you download the data from OpenML)
+
 library(withr)       # 2.5.0
 library(tidyverse)   # 1.3.2
 
@@ -41,7 +45,8 @@ library(lightgbm)    # 3.3.5
 library(shapviz)     # 0.6.0
 library(kernelshap)  # 0.3.4
 
-df <- read_parquet("rdata/df.parquet")
+# df <- arrow::read_parquet("rdata/df.parquet")
+df <- getOMLDataSet(data.id = 45106L)$data
 
 dim(df)
 head(df)
@@ -197,7 +202,7 @@ with_seed(
 )
 ```
 
-## TreeSHAP
+## LightGBM and TreeSHAP
 
 Let's explain our LightGBM model with the extremely efficient TreeSHAP algorithm.
 
@@ -222,6 +227,8 @@ sv_importance(shap_lgb, kind = "bee")
 
 ### SHAP dependence plots
 
+Each figure uses the potentially strongest interacting feature on the color scale. Therefore, the colors differ from picture to picture (and later also from model to model).
+
 ```{r}
 for (xvar in x) {
   (sv_dependence(shap_lgb, xvar, alpha = 0.5) + 
@@ -231,7 +238,7 @@ for (xvar in x) {
 }
 ```
 
-## GLM
+## GLM with Kernel SHAP
 
 For all other models, including our GLM, we use model-agnostic Kernel SHAP, and focus on SHAP dependence plots. (Setting `verbose = FALSE` suppresses the progress bar - it does not play well with R Markdown).
 
@@ -248,7 +255,7 @@ for (xvar in x) {
 }
 ```
 
-## Neural net
+## Neural net with Kernel SHAP
 
 ```{r}
 # Function that maps data.frame to neural net input and calculates (log) predictions
@@ -274,7 +281,7 @@ for (xvar in x) {
 }
 ```
 
-## True model
+## True model with Kernel SHAP
 
 ```{r}
 system.time(
