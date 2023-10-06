@@ -1,0 +1,10 @@
+FROM jupyter/base-notebook:python-3.10
+
+COPY tuneinsight-hefloat-0.4.2.tar.gz tuneinsight-hefloat-0.4.2.tar.gz
+RUN pip install tuneinsight-hefloat-0.4.2.tar.gz
+
+RUN rm tuneinsight-hefloat-0.4.2.tar.gz
+
+COPY PPML-HE.ipynb PPML-HE.ipynb
+
+CMD ["/usr/local/bin/start-notebook.sh", "--NotebookApp.token=''", "--NotebookApp.password=''"]
