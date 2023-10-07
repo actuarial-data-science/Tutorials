@@ -57,3 +57,7 @@ Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4248143
 
 Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4389797
 
+## 15 - Privacy-preserving machine learning
+
+Article: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4595287
+
