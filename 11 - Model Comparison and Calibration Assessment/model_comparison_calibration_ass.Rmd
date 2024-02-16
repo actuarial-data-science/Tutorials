@@ -1055,7 +1055,7 @@ autoplot(
 
 ## Model comparison
 
-### Compare different scoring functions
+### Compare absolute and relative performance scores
 
 ```{r}
 # Function returns two relevant mean Gamma deviance and corresponding D2
