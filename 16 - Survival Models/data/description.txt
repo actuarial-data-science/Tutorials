@@ -1,0 +1,1704 @@
+Description: Data snapshot for joint work on SAA Data Science Working Group tutorial
+Samples selected:
+      1996 NHIS
+      1997 NHIS
+      1998 NHIS
+      1999 NHIS
+      2000 NHIS
+      2001 NHIS
+      2002 NHIS
+      2003 NHIS
+      2004 NHIS
+      2005 NHIS
+      2006 NHIS
+      2007 NHIS
+      2008 NHIS
+      2009 NHIS
+      2010 NHIS
+      2011 NHIS
+      2012 NHIS
+      2013 NHIS
+      2014 NHIS
+      2015 NHIS
+      2016 NHIS
+      2017 NHIS
+      2018 NHIS
+      2019 NHIS
+      2020 NHIS
+      2021 NHIS
+      2022 NHIS
+      2023 NHIS
+File Type:                    rectangular
+Case Selection:               No
+  Variable                         Columns        Len   1996    1997    1998    1999    2000    2001    2002    2003    2004    2005    2006    2007    2008    2009    2010    2011    2012    2013    2014    2015    2016    2017    2018    2019    2020    2021    2022    2023    
+  YEAR                         H   1-4            4     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  SERIAL                       H   5-10           6     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  STRATA                       H  11-14           4     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  PSU                          H  15-17           3     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  NHISHID                      H  18-31          14     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  HHWEIGHT                     H  32-37           6     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  REGION                       H  38-39           2     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  URBRRL                       H  40              1     .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       X       X       X       X       X       
+  PERNUM                       P  41-42           2     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  NHISPID                      P  43-58          16     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  HHX                          P  59-65           7     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  FMX                          P  66-67           2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  PX                           P  68-69           2     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  PERWEIGHT                    P  70-81          12     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  SAMPWEIGHT                   P  82-93          12     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  LONGWEIGHT                   P  94-104         11     .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       X       .       .       .       
+  PARTWEIGHT                   P 105-115         11     .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       X       .       .       .       
+  FWEIGHT                      P 116-121          6     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  SUPP1WT                      P 122-130          9     X       X       X       X       X       X       X       X       .       .       .       .       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       .       
+  ASTATFLG                     P 131              1     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  CSTATFLG                     P 132              1     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  ASTATQCFLAG                  P 133              1     .       .       .       .       .       .       .       .       .       .       .       .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  SAPROXYAVAIL                 P 134              1     .       .       .       .       .       .       .       .       .       .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  AGE                          P 135-137          3     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  SEX                          P 138              1     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  MARSTCUR                     P 139              1     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  MARSTLEG                     P 140-141          2     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  MARSTAT                      P 142-143          2     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       
+  MARST                        P 144-145          2     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       
+  FAMKIDNO                     P 146-147          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  RACENEW                      P 148-150          3     .       .       .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  HISPETH                      P 151-152          2     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  HISPYN                       P 153              1     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  USBORN                       P 154-155          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  CITIZEN                      P 156              1     .       .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  EDUC                         P 157-159          3     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  IND                          P 160-161          2     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       X       .       X       
+  HOURSWRK                     P 162-163          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  CPI2009                      P 164-167          4     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  EARNINGS                     P 168-169          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  EARNIMP1                     P 170-171          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  EARNIMP2                     P 172-173          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  EARNIMP3                     P 174-175          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  EARNIMP4                     P 176-177          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  EARNIMP5                     P 178-179          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  EARNIMPOINT1                 P 180-185          6     .       .       .       .       .       .       .       .       .       .       .       .       .       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  EARNIMPOINT2                 P 186-191          6     .       .       .       .       .       .       .       .       .       .       .       .       .       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  EARNIMPOINT3                 P 192-197          6     .       .       .       .       .       .       .       .       .       .       .       .       .       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  EARNIMPOINT4                 P 198-203          6     .       .       .       .       .       .       .       .       .       .       .       .       .       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  EARNIMPOINT5                 P 204-209          6     .       .       .       .       .       .       .       .       .       .       .       .       .       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  OWNERSHIP                    P 210-211          2     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  BMICALC                      P 212-215          4     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  BMICAT                       P 216              1     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  HINOTCOVE                    P 217              1     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  HIPRIVATEE                   P 218              1     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  HIMCAIDE                     P 219              1     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  HIMCAREE                     P 220              1     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  HIPRIVATE                    P 221-222          2     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  VACFLU12M                    P 223              1     .       .       .       .       .       .       .       .       .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  ALCAMT                       P 224-225          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       .       X       .       
+  ALCDAYSWK                    P 226-227          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       .       X       .       
+  ALCDAYSYR                    P 228-230          3     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       .       X       .       
+  CIGSDAY1                     P 231-232          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  CIGSDAY2                     P 233-234          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  SMOKESTATUS2                 P 235-236          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  MOD10DMIN                    P 237-239          3     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       .       X       .       
+  MOD10DNO                     P 240-242          3     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       .       X       .       
+  MOD10DTP                     P 243              1     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       .       X       .       
+  MOD10FNO                     P 244-247          4     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       .       X       .       
+  MOD10FTP                     P 248-249          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       .       X       .       
+  MOD10FWK                     P 250-251          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       .       X       .       
+  VIG10DMIN                    P 252-254          3     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       .       X       .       
+  VIG10DNO                     P 255-257          3     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       .       X       .       
+  VIG10DTP                     P 258              1     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       .       X       .       
+  VIG10FNO                     P 259-262          4     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       .       X       .       
+  VIG10FTP                     P 263-264          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       .       X       .       
+  VIG10FWK                     P 265-266          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       .       X       .       
+  STRONGFNO                    P 267-270          4     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       .       X       .       
+  STRONGFTP                    P 271-272          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       .       X       .       
+  STRONGFWK                    P 273-274          2     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       .       X       .       
+  HRSLEEP                      P 275-276          2     .       .       .       .       .       .       .       .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       X       .       X       .       
+  AEFFORT                      P 277              1     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       X       .       .       
+  AFEELINT1MO                  P 278              1     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  AHOPELESS                    P 279              1     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       X       .       .       
+  ANERVOUS                     P 280              1     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       X       .       .       
+  ARESTLESS                    P 281              1     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       X       .       .       
+  ASAD                         P 282              1     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       X       .       .       
+  AWORTHLESS                   P 283              1     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       X       .       .       
+  ANXIETYEV                    P 284              1     .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       .       X       X       X       X       X       
+  WORFREQ                      P 285              1     .       .       .       .       .       .       .       .       .       .       .       .       .       .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  WORRX                        P 286              1     .       .       .       .       .       .       .       .       .       .       .       .       .       .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  WORFEELEVL                   P 287              1     .       .       .       .       .       .       .       .       .       .       .       .       .       .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  DEPFREQ                      P 288              1     .       .       .       .       .       .       .       .       .       .       .       .       .       .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  DEPRX                        P 289              1     .       .       .       .       .       .       .       .       .       .       .       .       .       .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  DEPFEELEVL                   P 290              1     .       .       .       .       .       .       .       .       .       .       .       .       .       .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       
+  MORTSTAT                     P 291              1     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  MORTDODY                     P 292-295          4     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  MORTUCODLD                   P 296-297          2     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+  MORTWT                       P 298-305          8     X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       .       .       .       .       
+  MORTWTSA                     P 306-313          8     .       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       X       .       .       .       .       .       
+
+Variable Availability Key:
+All Years X - available in this sample
+All Years . - not available in this sample
+
+RECTYPE   Record type
+H         Household
+P         Person
+I         Injury
+X         Condition
+D         Dr. visits
+A         Hospital record
+M         Prescribed medicine
+O         Non-prescribed medicine
+S         X-ray record
+Z         Poison record
+V         Motor vehicle person accident
+G         Pregnancy
+Y         Soa/condtion
+L         Vitamin/mineral
+B         Disability condition
+
+REGION              Region of residence
+01                  Northeast
+02                  North Central/Midwest
+03                  South
+04                  West
+08                  NO DATA IN ROUND
+09                  Unknown
+
+URBRRL              Urban-Rural county classification
+1                   Large central metro
+2                   Large fringe metro
+3                   Medium and small metro
+4                   Nonmetropolitan
+
+ASTATFLG            Sample adult flag
+0                   NIU
+1                   Sample adult, has record
+2                   Sample adult, no record
+3                   Not selected as sample adult
+4                   No one selected as sample adult
+5                   Armed forces member
+6                   AF member, selected as sample adult
+
+CSTATFLG            Sample child flag
+0                   NIU
+1                   Sample child-has record
+2                   Sample child-no record
+3                   Not selected as sample child
+4                   No one selected as sample child
+5                   Emancipated minor
+
+ASTATQCFLAG         Quality control flag for sample adult
+1                   No, sample adult data not removed for this case
+2                   Yes, sample adult data removed for quality reasons
+
+SAPROXYAVAIL        Knowledgeable proxy available for sample adult
+0                   NIU
+1                   No
+2                   Yes
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+SEX                 Sex
+1                   Male
+2                   Female
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+MARSTCUR            Current marital status
+0                   NIU
+1                   Married, spouse present
+2                   Married, spouse absent
+3                   Married, spouse in household unknown
+4                   Separated
+5                   Divorced
+6                   Widowed
+7                   Living with partner
+8                   Never married
+9                   Unknown marital status
+
+MARSTLEG            Legal marital status
+00                  NIU
+10                  Married
+11                  Married - Spouse present
+12                  Married - Spouse not in household
+13                  Married - Spouse in household unknown
+20                  Widowed
+30                  Divorced
+40                  Separated
+50                  Never married
+99                  Unknown marital status
+
+MARSTAT             Legal marital status
+00                  NIU
+10                  Married
+11                  Married - Spouse present
+12                  Married - Spouse not in household
+13                  Married - Spouse in household unknown
+20                  Widowed
+30                  Divorced
+40                  Separated
+50                  Never married
+99                  Unknown marital status
+
+MARST               Current marital status
+00                  NIU
+10                  Married
+11                  Married - Spouse present
+12                  Married - Spouse not in household
+13                  Married - Spouse in household unknown
+20                  Widowed
+30                  Divorced
+40                  Separated
+50                  Never married
+99                  Unknown marital status
+
+RACENEW             Self-reported Race (Post-1997 OMB standards)
+100                 White only
+200                 Black/African American only
+300                 American Indian/Alaska Native only
+400                 Asian only
+500                 Other Race and Multiple Race
+510                 Other Race and Multiple Race (2019-forward: Excluding American Indian/Alaska Native)
+520                 Other Race
+530                 Race Group Not Releasable
+540                 Multiple Race
+541                 Multiple Race (1999-2018: Including American Indian/Alaska Native)
+542                 American Indian/Alaska Native and Any Other Race
+997                 Unknown-Refused
+998                 Unknown-Not ascertained
+999                 Unknown-Don't Know
+
+HISPETH             Hispanic ethnicity
+10                  Not Hispanic/Spanish origin
+20                  Mexican
+21                  Mexican-Mexicano
+22                  Mexicano
+23                  Mexican-American
+24                  Chicano
+30                  Puerto Rican
+40                  Cuban/Cuban American
+50                  Dominican (Republic)
+60                  Other Hispanic
+61                  Central or South American
+62                  Other Latin American, type not specified
+63                  Other Spanish
+64                  Hispanic/Latino/Spanish, non-specific type
+65                  Hispanic/Latino/Spanish, type refused
+66                  Hispanic/Latino/Spanish, type not ascertained
+67                  Hispanic/Spanish, type don't know
+70                  Multiple Hispanic
+90                  Unknown
+91                  Unknown if Hispanic/Spanish origin
+92                  Two origins, unknown which is the main
+93                  Origin unknown, refused or not reported
+99                  NIU
+
+HISPYN              Hispanic ethnicity, dichotomous
+1                   No, not of Hispanic ethnicity
+2                   Yes, of Hispanic ethnicity
+7                   Unknown--refused
+8                   Unknown--not ascertained
+9                   Unknown--don't know
+
+USBORN              Born in the United States
+10                  No
+11                  No, born in U.S. territory
+12                  No, born outside U.S. and U.S. territories
+20                  Yes, born in U.S.
+96                  NIU
+97                  Unknown-refused
+98                  Unknown-not ascertained
+99                  Unknown-don't know
+
+CITIZEN             U.S. citizenship
+1                   No, not U.S. citizen
+2                   Yes, U.S. citizen
+7                   Unknown--refused
+8                   Unknown--not ascertained
+9                   Unknown--don't know
+
+EDUC                Educational attainment
+000                 NIU
+100                 Grade 12 or less, no high school diploma or equivalent
+101                 Grade 8 or less (no further detail)
+102                 Never attended/kindergarten only
+103                 Grades 1-11 (no further detail)
+104                 Grade 1
+105                 Grade 2
+106                 Grade 3
+107                 Grade 4
+108                 Grade 5
+109                 Grade 6
+110                 Grade 7
+111                 Grade 8
+112                 Grade 9-12, no diploma (no further detail)
+113                 Grade 9
+114                 Grade 10
+115                 Grade 11
+116                 12th grade, no diploma
+200                 High school diploma or GED
+201                 High school graduate
+202                 GED or equivalent
+300                 Some college, no 4yr degree
+301                 Some college, no degree
+302                 AA degree: technical/vocational/occupational
+303                 AA degree: academic program
+400                 Bachelor's degree (BA,AB,BS,BBA)
+500                 Master's, Professional, or Doctoral Degree
+501                 Master's degree (MA,MS,Med,MBA)
+502                 Professional (MD,DDS,DVM,JD)
+503                 Doctoral degree (PhD, EdD)
+504                 Other degree
+505                 Professional School or Doctoral degree, topcoded (MD, DDS, DVM, JD, PhD, EdD)
+996                 No degree, years of education unknown
+997                 Unknown--refused
+998                 Unknown--not ascertained
+999                 Unknown--don't know
+
+IND                 Detailed industry recode, 1969-2003
+00                  NIU
+
+HOURSWRK            Total hours worked last week or usually
+00                  NIU
+01                  1
+02                  2
+03                  3
+04                  4
+05                  5
+06                  6
+07                  7
+08                  8
+09                  9
+10                  10
+11                  11
+12                  12
+13                  13
+14                  14
+15                  15
+16                  16
+17                  17
+18                  18
+19                  19
+20                  20
+21                  21
+22                  22
+23                  23
+24                  24
+25                  25
+26                  26
+27                  27
+28                  28
+29                  29
+30                  30
+31                  31
+32                  32
+33                  33
+34                  34
+35                  35
+36                  36
+37                  37
+38                  38
+39                  39
+40                  40
+41                  41
+42                  42
+43                  43
+44                  44
+45                  45
+46                  46
+47                  47
+48                  48
+49                  49
+50                  50
+51                  51
+52                  52
+53                  53
+54                  54
+55                  55
+56                  56
+57                  57
+58                  58
+59                  59
+60                  60
+61                  61
+62                  62
+63                  63
+64                  64
+65                  65
+66                  66
+67                  67
+68                  68
+69                  69
+70                  70
+71                  71
+72                  72
+73                  73
+74                  74
+75                  75
+76                  76
+77                  77
+78                  78
+79                  79
+80                  80
+81                  81
+82                  82
+83                  83
+84                  84
+85                  85
+86                  86
+87                  87
+88                  88
+89                  89
+90                  90
+91                  91
+92                  92
+93                  93
+94                  94
+95                  95+ hours
+97                  Unknown--refused
+98                  Unknown--not ascertained
+99                  Unknown--don't know
+
+EARNINGS            Person's total earnings, previous calendar year
+00                  NIU
+01                  $01 to $4999
+02                  $5000 to $9999
+03                  $10000 to $14999
+04                  $15000 to $19999
+05                  $20000 to $24999
+06                  $25000 to $34999
+07                  $35000 to $44999
+08                  $45000 to $54999
+09                  $55000 to $64999
+10                  $65000 to $74999
+11                  $75000 and over
+97                  Unknown-refused
+98                  Unknown-not ascertained
+99                  Unknown-don't know
+
+EARNIMP1            Person's imputed total earnings, previous calendar year
+00                  NIU
+01                  $01 to $4,999
+02                  $5,000 to $9,999
+03                  $10,000 to $14,999
+04                  $15,000 to $19,999
+05                  $20,000 to $24,999
+10                  $25,000 to $34,999
+11                  $25,000 to $29,999
+12                  $30,000 to $34,999
+20                  $35,000 to $44,999
+21                  $35,000 to $39,999
+22                  $40,000 to $44,999
+30                  $45,000 to $54,999
+31                  $45,000 to $49,999
+32                  $50,000 to $54,999
+40                  $55,000 to $64,999
+41                  $55,000 to $59,999
+42                  $60,000 to $64,999
+50                  $65,000 to $74,999
+51                  $65,000 to $69,999
+52                  $70,000 to $74,999
+60                  $75,000 and over
+61                  $75,000 to $79,999
+62                  $80,000 to $84,999
+63                  $85,000 to $89,999
+64                  $90,000 to $94,999
+65                  $95,000 to $99,999
+66                  $100,000 and over
+67                  $100,000-$104,999
+68                  $105,000-$109,999
+69                  $110,000-$114,999
+70                  $115,000 and over
+
+EARNIMP2            Person's imputed total earnings, previous calendar year
+00                  NIU
+01                  $01 to $4,999
+02                  $5,000 to $9,999
+03                  $10,000 to $14,999
+04                  $15,000 to $19,999
+05                  $20,000 to $24,999
+10                  $25,000 to $34,999
+11                  $25,000 to $29,999
+12                  $30,000 to $34,999
+20                  $35,000 to $44,999
+21                  $35,000 to $39,999
+22                  $40,000 to $44,999
+30                  $45,000 to $54,999
+31                  $45,000 to $49,999
+32                  $50,000 to $54,999
+40                  $55,000 to $64,999
+41                  $55,000 to $59,999
+42                  $60,000 to $64,999
+50                  $65,000 to $74,999
+51                  $65,000 to $69,999
+52                  $70,000 to $74,999
+60                  $75,000 and over
+61                  $75,000 to $79,999
+62                  $80,000 to $84,999
+63                  $85,000 to $89,999
+64                  $90,000 to $94,999
+65                  $95,000 to $99,999
+66                  $100,000 and over
+67                  $100,000-$104,999
+68                  $105,000-$109,999
+69                  $110,000-$114,999
+70                  $115,000 and over
+
+EARNIMP3            Person's imputed total earnings, previous calendar year
+00                  NIU
+01                  $01 to $4,999
+02                  $5,000 to $9,999
+03                  $10,000 to $14,999
+04                  $15,000 to $19,999
+05                  $20,000 to $24,999
+10                  $25,000 to $34,999
+11                  $25,000 to $29,999
+12                  $30,000 to $34,999
+20                  $35,000 to $44,999
+21                  $35,000 to $39,999
+22                  $40,000 to $44,999
+30                  $45,000 to $54,999
+31                  $45,000 to $49,999
+32                  $50,000 to $54,999
+40                  $55,000 to $64,999
+41                  $55,000 to $59,999
+42                  $60,000 to $64,999
+50                  $65,000 to $74,999
+51                  $65,000 to $69,999
+52                  $70,000 to $74,999
+60                  $75,000 and over
+61                  $75,000 to $79,999
+62                  $80,000 to $84,999
+63                  $85,000 to $89,999
+64                  $90,000 to $94,999
+65                  $95,000 to $99,999
+66                  $100,000 and over
+67                  $100,000-$104,999
+68                  $105,000-$109,999
+69                  $110,000-$114,999
+70                  $115,000 and over
+
+EARNIMP4            Person's imputed total earnings, previous calendar year
+00                  NIU
+01                  $01 to $4,999
+02                  $5,000 to $9,999
+03                  $10,000 to $14,999
+04                  $15,000 to $19,999
+05                  $20,000 to $24,999
+10                  $25,000 to $34,999
+11                  $25,000 to $29,999
+12                  $30,000 to $34,999
+20                  $35,000 to $44,999
+21                  $35,000 to $39,999
+22                  $40,000 to $44,999
+30                  $45,000 to $54,999
+31                  $45,000 to $49,999
+32                  $50,000 to $54,999
+40                  $55,000 to $64,999
+41                  $55,000 to $59,999
+42                  $60,000 to $64,999
+50                  $65,000 to $74,999
+51                  $65,000 to $69,999
+52                  $70,000 to $74,999
+60                  $75,000 and over
+61                  $75,000 to $79,999
+62                  $80,000 to $84,999
+63                  $85,000 to $89,999
+64                  $90,000 to $94,999
+65                  $95,000 to $99,999
+66                  $100,000 and over
+67                  $100,000-$104,999
+68                  $105,000-$109,999
+69                  $110,000-$114,999
+70                  $115,000 and over
+
+EARNIMP5            Person's imputed total earnings, previous calendar year
+00                  NIU
+01                  $01 to $4,999
+02                  $5,000 to $9,999
+03                  $10,000 to $14,999
+04                  $15,000 to $19,999
+05                  $20,000 to $24,999
+10                  $25,000 to $34,999
+11                  $25,000 to $29,999
+12                  $30,000 to $34,999
+20                  $35,000 to $44,999
+21                  $35,000 to $39,999
+22                  $40,000 to $44,999
+30                  $45,000 to $54,999
+31                  $45,000 to $49,999
+32                  $50,000 to $54,999
+40                  $55,000 to $64,999
+41                  $55,000 to $59,999
+42                  $60,000 to $64,999
+50                  $65,000 to $74,999
+51                  $65,000 to $69,999
+52                  $70,000 to $74,999
+60                  $75,000 and over
+61                  $75,000 to $79,999
+62                  $80,000 to $84,999
+63                  $85,000 to $89,999
+64                  $90,000 to $94,999
+65                  $95,000 to $99,999
+66                  $100,000 and over
+67                  $100,000-$104,999
+68                  $105,000-$109,999
+69                  $110,000-$114,999
+70                  $115,000 and over
+
+OWNERSHIP           Family's home owned or rented
+00                  NIU
+10                  Owned or being bought
+11                  Owned
+12                  Being bought
+20                  Rented
+30                  Other arrangement
+40                  Rent free
+97                  Unknown--refused
+98                  Unknown--not ascertained
+99                  Unknown--don't know
+
+BMICAT              Categorical body mass index
+0                   NIU
+1                   Underweight (BMI < 18.5)
+2                   Normal weight (BMI >= 18.5 & BMI < 25)
+3                   Overweight (BMI >= 25  & BMI < 30)
+4                   Obese (BMI 30+)
+9                   Unknown
+
+HINOTCOVE           Health Insurance coverage status
+0                   NIU
+1                   No, has coverage
+2                   Yes, has no coverage
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+HIPRIVATEE          Covered by private health insurance: Recode
+1                   No
+2                   Yes, information
+3                   Yes, but no information
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+HIMCAIDE            Covered by Medicaid: Recode
+1                   No
+2                   Yes, information
+3                   Yes, but no information
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+HIMCAREE            Covered by Medicare: Recode
+0                   NIU
+1                   No
+2                   Yes, information
+3                   Yes, but no information
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+HIPRIVATE           Has any private health insurance
+00                  NIU
+01                  No
+02                  Yes
+07                  Unknown-refused
+08                  Unknown-not ascertained
+09                  Unknown-don't know
+
+VACFLU12M           Had ANY flu vaccine, past 12 months
+0                   NIU
+1                   No
+2                   Yes
+3                   Reported both shot and spray vaccine (only available for SAs in 2005-2015, and SCs in 2005-August 10, 2010)
+7                   Refused
+8                   Not ascertained
+9                   Don't know
+
+ALCAMT              Average number of drinks on days drank
+00                  NIU
+01                  1 drink or less
+02                  2 drinks
+03                  3 drinks
+04                  4 drinks
+05                  5 drinks
+06                  6 drinks
+07                  7 drinks
+08                  8 drinks
+09                  9 drinks
+10                  10 drinks
+11                  11 drinks
+12                  12 drinks
+13                  13 drinks
+14                  14 drinks
+15                  15 drinks
+16                  16 drinks
+17                  17 drinks
+18                  18 drinks
+19                  19 drinks
+20                  20 drinks
+21                  21 drinks
+22                  22 drinks
+23                  23 drinks
+24                  24 drinks
+25                  25 drinks
+26                  26 drinks
+27                  27 drinks
+28                  28 drinks
+29                  29 drinks
+30                  30 drinks
+31                  31 drinks
+32                  32 drinks
+33                  33 drinks
+34                  34 drinks
+35                  35 drinks
+36                  36 drinks
+37                  37 drinks
+38                  38 drinks
+39                  39 drinks
+40                  40 drinks
+41                  41 drinks
+42                  42 drinks
+43                  43 drinks
+44                  44 drinks
+45                  45 drinks
+46                  46 drinks
+47                  47 drinks
+48                  48 drinks
+49                  49 drinks
+50                  50 drinks
+51                  51 drinks
+52                  52 drinks
+53                  53 drinks
+54                  54 drinks
+55                  55 drinks
+56                  56 drinks
+57                  57 drinks
+58                  58 drinks
+59                  59 drinks
+60                  60 drinks
+61                  61 drinks
+62                  62 drinks
+63                  63 drinks
+64                  64 drinks
+65                  65 drinks
+66                  66 drinks
+67                  67 drinks
+68                  68 drinks
+69                  69 drinks
+70                  70 drinks
+71                  71 drinks
+72                  72 drinks
+73                  73 drinks
+74                  74 drinks
+75                  75 drinks
+76                  76 drinks
+77                  77 drinks
+78                  78 drinks
+79                  79 drinks
+80                  80 drinks
+81                  81 drinks
+82                  82 drinks
+83                  83 drinks
+84                  84 drinks
+85                  85 drinks
+86                  86 drinks
+87                  87 drinks
+88                  88 drinks
+89                  89 drinks
+90                  90 drinks
+91                  91 drinks
+92                  92 drinks
+93                  93 drinks
+94                  94 drinks
+95                  95+ drinks
+96                  Inconsistent
+97                  Unknown - refused
+98                  Unknown - not ascertained
+99                  Unknown - don't know
+
+ALCDAYSWK           Frequency drank alcohol in past year: Days per week
+00                  Less than one day per week
+10                  1 day per week
+20                  2 days per week
+30                  3 days per week
+40                  4 days per week
+50                  5 days per week
+60                  6 days per week
+70                  7 days per week
+80                  Did not drink in past year
+95                  Inconsistent
+96                  NIU
+97                  Unknown-refused
+98                  Unknown-not ascertained
+99                  Unknown-don't know
+
+ALCDAYSYR           Frequency drank alcohol in past year: Days in past year
+000                 0 days
+001                 1 day
+002                 2 days
+003                 3 days
+004                 4 days
+005                 5 days
+006                 6 days
+007                 7 days
+008                 8 days
+009                 9 days
+010                 10 days
+011                 11 days
+012                 12 days
+013                 13 days
+014                 14 days
+015                 15 days
+016                 16 days
+017                 17 days
+018                 18 days
+019                 19 days
+020                 20 days
+021                 21 days
+022                 22 days
+023                 23 days
+024                 24 days
+025                 25 days
+026                 26 days
+027                 27 days
+028                 28 days
+029                 29 days
+030                 30 days
+031                 31 days
+032                 32 days
+033                 33 days
+034                 34 days
+035                 35 days
+036                 36 days
+037                 37 days
+038                 38 days
+039                 39 days
+040                 40 days
+041                 41 days
+042                 42 days
+043                 43 days
+044                 44 days
+045                 45 days
+046                 46 days
+047                 47 days
+048                 48 days
+049                 49 days
+050                 50 days
+051                 51 days
+052                 52 days
+053                 53 days
+054                 54 days
+055                 55 days
+056                 56 days
+057                 57 days
+058                 58 days
+059                 59 days
+060                 60 days
+061                 61 days
+062                 62 days
+063                 63 days
+064                 64 days
+065                 65 days
+066                 66 days
+067                 67 days
+068                 68 days
+069                 69 days
+070                 70 days
+071                 71 days
+072                 72 days
+073                 73 days
+074                 74 days
+075                 75 days
+076                 76 days
+077                 77 days
+078                 78 days
+079                 79 days
+080                 80 days
+081                 81 days
+082                 82 days
+083                 83 days
+084                 84 days
+085                 85 days
+086                 86 days
+087                 87 days
+088                 88 days
+089                 89 days
+090                 90 days
+091                 91 days
+092                 92 days
+093                 93 days
+094                 94 days
+095                 95 days
+096                 96 days
+097                 97 days
+098                 98 days
+099                 99 days
+100                 100 days
+101                 101 days
+102                 102 days
+103                 103 days
+104                 104 days
+105                 105 days
+106                 106 days
+107                 107 days
+108                 108 days
+109                 109 days
+110                 110 days
+111                 111 days
+112                 112 days
+113                 113 days
+114                 114 days
+115                 115 days
+116                 116 days
+117                 117 days
+118                 118 days
+119                 119 days
+120                 120 days
+121                 121 days
+122                 122 days
+123                 123 days
+124                 124 days
+125                 125 days
+126                 126 days
+127                 127 days
+128                 128 days
+129                 129 days
+130                 130 days
+131                 131 days
+132                 132 days
+133                 133 days
+134                 134 days
+135                 135 days
+136                 136 days
+137                 137 days
+138                 138 days
+139                 139 days
+140                 140 days
+141                 141 days
+142                 142 days
+143                 143 days
+144                 144 days
+145                 145 days
+146                 146 days
+147                 147 days
+148                 148 days
+149                 149 days
+150                 150 days
+151                 151 days
+152                 152 days
+153                 153 days
+154                 154 days
+155                 155 days
+156                 156 days
+157                 157 days
+158                 158 days
+159                 159 days
+160                 160 days
+161                 161 days
+162                 162 days
+163                 163 days
+164                 164 days
+165                 165 days
+166                 166 days
+167                 167 days
+168                 168 days
+169                 169 days
+170                 170 days
+171                 171 days
+172                 172 days
+173                 173 days
+174                 174 days
+175                 175 days
+176                 176 days
+177                 177 days
+178                 178 days
+179                 179 days
+180                 180 days
+181                 181 days
+182                 182 days
+183                 183 days
+184                 184 days
+185                 185 days
+186                 186 days
+187                 187 days
+188                 188 days
+189                 189 days
+190                 190 days
+191                 191 days
+192                 192 days
+193                 193 days
+194                 194 days
+195                 195 days
+196                 196 days
+197                 197 days
+198                 198 days
+199                 199 days
+200                 200 days
+201                 201 days
+202                 202 days
+203                 203 days
+204                 204 days
+205                 205 days
+206                 206 days
+207                 207 days
+208                 208 days
+209                 209 days
+210                 210 days
+211                 211 days
+212                 212 days
+213                 213 days
+214                 214 days
+215                 215 days
+216                 216 days
+217                 217 days
+218                 218 days
+219                 219 days
+220                 220 days
+221                 221 days
+222                 222 days
+223                 223 days
+224                 224 days
+225                 225 days
+226                 226 days
+227                 227 days
+228                 228 days
+229                 229 days
+230                 230 days
+231                 231 days
+232                 232 days
+233                 233 days
+234                 234 days
+235                 235 days
+236                 236 days
+237                 237 days
+238                 238 days
+239                 239 days
+240                 240 days
+241                 241 days
+242                 242 days
+243                 243 days
+244                 244 days
+245                 245 days
+246                 246 days
+247                 247 days
+248                 248 days
+249                 249 days
+250                 250 days
+251                 251 days
+252                 252 days
+253                 253 days
+254                 254 days
+255                 255 days
+256                 256 days
+257                 257 days
+258                 258 days
+259                 259 days
+260                 260 days
+261                 261 days
+262                 262 days
+263                 263 days
+264                 264 days
+265                 265 days
+266                 266 days
+267                 267 days
+268                 268 days
+269                 269 days
+270                 270 days
+271                 271 days
+272                 272 days
+273                 273 days
+274                 274 days
+275                 275 days
+276                 276 days
+277                 277 days
+278                 278 days
+279                 279 days
+280                 280 days
+281                 281 days
+282                 282 days
+283                 283 days
+284                 284 days
+285                 285 days
+286                 286 days
+287                 287 days
+288                 288 days
+289                 289 days
+290                 290 days
+291                 291 days
+292                 292 days
+293                 293 days
+294                 294 day
+295                 295 days
+296                 296 days
+297                 297 days
+298                 298 days
+299                 299 days
+300                 300 days
+301                 301 days
+302                 302 days
+303                 303 days
+304                 304 days
+305                 305 days
+306                 306 days
+307                 307 days
+308                 308 days
+309                 309 days
+310                 310 days
+311                 311 days
+312                 312 days
+313                 313 days
+314                 314 days
+315                 315 days
+316                 316 days
+317                 317 days
+318                 318 days
+319                 319 days
+320                 320 days
+321                 321 days
+322                 322 days
+323                 323 days
+324                 324 days
+325                 325 days
+326                 326 days
+327                 327 days
+328                 328 days
+329                 329 days
+330                 330 days
+331                 331 days
+332                 332 days
+333                 333 days
+334                 334 days
+335                 335 days
+336                 336 days
+337                 337 days
+338                 338 days
+339                 339 days
+340                 340 days
+341                 341 days
+342                 342 days
+343                 343 days
+344                 344 days
+345                 345 days
+346                 346 days
+347                 347 days
+348                 348 days
+349                 349 days
+350                 350 days
+351                 351 days
+352                 352 days
+353                 353 days
+354                 354 days
+355                 355 days
+356                 356 days
+357                 357 days
+358                 358 days
+359                 359 days
+360                 360 days
+361                 361 days
+362                 362 days
+363                 363 days
+364                 364 days
+365                 365 days
+995                 Inconsistent
+996                 NIU
+997                 Unknown-refused
+998                 Unknown-not ascertained
+999                 Unknown-don't know
+
+CIGSDAY1            Number cigarettes per day (daily smokers)
+00                  NIU
+01                  1 cigarette
+02                  2 cigarettes
+03                  3 cigarettes
+04                  4 cigarettes
+05                  5 cigarettes
+06                  6 cigarettes
+07                  7 cigarettes
+08                  8 cigarettes
+09                  9 cigarettes
+10                  10 cigarettes
+11                  11 cigarettes
+12                  12 cigarettes
+13                  13 cigarettes
+14                  14 cigarettes
+15                  15 cigarettes
+16                  16 cigarettes
+17                  17 cigarettes
+18                  18 cigarettes
+19                  19 cigarettes
+20                  20 cigarettes
+21                  21 cigarettes
+22                  22 cigarettes
+23                  23 cigarettes
+24                  24 cigarettes
+25                  25 cigarettes
+26                  26 cigarettes
+27                  27 cigarettes
+28                  28 cigarettes
+29                  29 cigarettes
+30                  30 cigarettes
+31                  31 cigarettes
+32                  32 cigarettes
+33                  33 cigarettes
+34                  34 cigarettes
+35                  35 cigarettes
+36                  36 cigarettes
+37                  37 cigarettes
+38                  38 cigarettes
+39                  39 cigarettes
+40                  40 cigarettes
+41                  41 cigarettes
+42                  42 cigarettes
+43                  43 cigarettes
+44                  44 cigarettes
+45                  45 cigarettes
+46                  46 cigarettes
+47                  47 cigarettes
+48                  48 cigarettes
+49                  49 cigarettes
+50                  50 cigarettes
+51                  51 cigarettes
+52                  52 cigarettes
+53                  53 cigarettes
+54                  54 cigarettes
+55                  55 cigarettes
+56                  56 cigarettes
+57                  57 cigarettes
+58                  58 cigarettes
+59                  59 cigarettes
+60                  60 cigarettes
+61                  61 cigarettes
+62                  62 cigarettes
+63                  63 cigarettes
+64                  64 cigarettes
+65                  65 cigarettes
+66                  66 cigarettes
+67                  67 cigarettes
+68                  68 cigarettes
+69                  69 cigarettes
+70                  70 cigarettes
+71                  71 cigarettes
+72                  72 cigarettes
+73                  73 cigarettes
+74                  74 cigarettes
+75                  75 cigarettes
+76                  76 cigarettes
+77                  77 cigarettes
+78                  78 cigarettes
+79                  79 cigarettes
+80                  80 cigarettes
+81                  81 cigarettes
+82                  82 cigarettes
+83                  83 cigarettes
+84                  84 cigarettes
+85                  85 cigarettes
+86                  86 cigarettes
+87                  87 cigarettes
+88                  88 cigarettes
+89                  89 cigarettes
+90                  90 cigarettes
+91                  91 cigarettes
+92                  92 cigarettes
+93                  93 cigarettes
+94                  94 cigarettes
+95                  95+ cigarettes
+97                  Unknown-refused
+98                  Unknown-not ascertained
+99                  Unknown-don't know
+
+CIGSDAY2            Number cigarettes per day (some day smokers)
+00                  NIU
+01                  1 cigarette
+02                  2 cigarettes
+03                  3 cigarettes
+04                  4 cigarettes
+05                  5 cigarettes
+06                  6 cigarettes
+07                  7 cigarettes
+08                  8 cigarettes
+09                  9 cigarettes
+10                  10 cigarettes
+11                  11 cigarettes
+12                  12 cigarettes
+13                  13 cigarettes
+14                  14 cigarettes
+15                  15 cigarettes
+16                  16 cigarettes
+17                  17 cigarettes
+18                  18 cigarettes
+19                  19 cigarettes
+20                  20 cigarettes
+21                  21 cigarettes
+22                  22 cigarettes
+23                  23 cigarettes
+24                  24 cigarettes
+25                  25 cigarettes
+26                  26 cigarettes
+27                  27 cigarettes
+28                  28 cigarettes
+29                  29 cigarettes
+30                  30 cigarettes
+31                  31 cigarettes
+32                  32 cigarettes
+33                  33 cigarettes
+34                  34 cigarettes
+35                  35 cigarettes
+36                  36 cigarettes
+37                  37 cigarettes
+38                  38 cigarettes
+39                  39 cigarettes
+40                  40 cigarettes
+41                  41 cigarettes
+42                  42 cigarettes
+43                  43 cigarettes
+44                  44 cigarettes
+45                  45 cigarettes
+46                  46 cigarettes
+47                  47 cigarettes
+48                  48 cigarettes
+49                  49 cigarettes
+50                  50 cigarettes
+51                  51 cigarettes
+52                  52 cigarettes
+53                  53 cigarettes
+54                  54 cigarettes
+55                  55 cigarettes
+56                  56 cigarettes
+57                  57 cigarettes
+58                  58 cigarettes
+59                  59 cigarettes
+60                  60 cigarettes
+61                  61 cigarettes
+62                  62 cigarettes
+63                  63 cigarettes
+64                  64 cigarettes
+65                  65 cigarettes
+66                  66 cigarettes
+67                  67 cigarettes
+68                  68 cigarettes
+69                  69 cigarettes
+70                  70 cigarettes
+71                  71 cigarettes
+72                  72 cigarettes
+73                  73 cigarettes
+74                  74 cigarettes
+75                  75 cigarettes
+76                  76 cigarettes
+77                  77 cigarettes
+78                  78 cigarettes
+79                  79 cigarettes
+80                  80 cigarettes
+81                  81 cigarettes
+82                  82 cigarettes
+83                  83 cigarettes
+84                  84 cigarettes
+85                  85 cigarettes
+86                  86 cigarettes
+87                  87 cigarettes
+88                  88 cigarettes
+89                  89 cigarettes
+90                  90 cigarettes
+91                  91 cigarettes
+92                  92 cigarettes
+93                  93 cigarettes
+94                  94 cigarettes
+95                  95+ cigarettes
+97                  Unknown-refused
+98                  Unknown-not ascertained
+99                  Unknown-don't know
+
+SMOKESTATUS2        Cigarette smoking recode 2: Current detailed/former/never
+00                  NIU
+10                  Current smoker
+11                  Current every day smoker
+12                  Current some day smoker
+13                  Current smoker, unknown how often smokes
+20                  Former smoker
+30                  Never smoked
+40                  Has smoked, current smoking status unknown
+90                  Unknown if ever smoked
+
+MOD10DTP            Duration of moderate activity 10+ minutes: Time period
+0                   NIU
+1                   Minutes
+2                   Hours
+3                   Extreme value
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+MOD10FTP            Frequency of moderate activity 10+ minutes: Time period
+00                  NIU
+01                  Never
+02                  Day
+03                  Week
+04                  Month
+05                  Year
+06                  Unable to do this activity
+07                  Extreme value
+97                  Unknown-refused
+98                  Unknown-not ascertained
+99                  Unknown-don't know
+
+VIG10DTP            Duration of vigorous activity 10+ minutes: Time period
+0                   NIU
+1                   Minutes
+2                   Hours
+3                   Extreme value
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+VIG10FTP            Frequency of vigorous activity 10+ minutes: Time period
+00                  NIU
+01                  Never
+02                  Day
+03                  Week
+04                  Month
+05                  Year
+06                  Unable to do this activity
+07                  Extreme value
+97                  Unknown-refused
+98                  Unknown-not ascertained
+99                  Unknown-don't know
+
+STRONGFTP           Frequency of strengthening activity: Time period
+00                  NIU
+01                  Never
+02                  Day
+03                  Week
+04                  Month
+05                  Year
+06                  Unable to do this activity
+07                  Extreme value
+97                  Unknown-refused
+98                  Unknown-not ascertained
+99                  Unknown-don't know
+
+HRSLEEP             Usual hours sleep per day
+00                  NIU
+01                  1 hour (1990: 0 or 1 hour)
+02                  2 hours
+03                  3 hours
+04                  4 hours
+05                  5 hours
+06                  6 hours
+07                  7 hours
+08                  8 hours
+09                  9 hours
+10                  10 hours
+11                  11 hours
+12                  12 hours
+13                  13 hours
+14                  14 hours
+15                  15 hours
+16                  16 hours
+17                  17 hours
+18                  18 hours
+19                  19 hours
+20                  20 hours
+21                  21 hours
+22                  22 hours
+23                  23 hours
+24                  24 hours
+25                  Less than 1 hour
+97                  Unknown-refused
+98                  Unknown-not ascertained
+99                  Unknown-don't know
+
+AEFFORT             Felt everything an effort, past 30 days (adults)
+0                   None of the time
+1                   A little of the time
+2                   Some of the time
+3                   Most of the time
+4                   All of the time
+6                   NIU
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+AFEELINT1MO         Feelings interfered w. life, past 30 days (adults)
+0                   NIU
+1                   A lot
+2                   Some
+3                   A little
+4                   Not at all
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+AHOPELESS           How often felt hopeless, past 30 days (adults)
+0                   None of the time
+1                   A little of the time
+2                   Some of the time
+3                   Most of the time
+4                   All of the time
+6                   NIU
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+ANERVOUS            How often felt nervous, past 30 days (adults)
+0                   None of the time
+1                   A little of the time
+2                   Some of the time
+3                   Most of the time
+4                   All of the time
+6                   NIU
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+ARESTLESS           How often felt restless, past 30 days (adults)
+0                   None of the time
+1                   A little of the time
+2                   Some of the time
+3                   Most of the time
+4                   All of the time
+6                   NIU
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+ASAD                How often felt sad, past 30 days (adults)
+0                   None of the time
+1                   A little of the time
+2                   Some of the time
+3                   Most of the time
+4                   All of the time
+6                   NIU
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+AWORTHLESS          How often felt worthless, past 30 days (adults)
+0                   None of the time
+1                   A little of the time
+2                   Some of the time
+3                   Most of the time
+4                   All of the time
+6                   NIU
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+ANXIETYEV           Ever told you had any anxiety disorder
+0                   NIU
+1                   No
+2                   Yes
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+WORFREQ             How often feel worried, nervous, or anxious
+0                   NIU
+1                   Daily
+2                   Weekly
+3                   Monthly
+4                   A few times a year
+5                   Never
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+WORRX               Take medication for worried, nervous, or anxious feelings
+0                   NIU
+1                   No
+2                   Yes
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+WORFEELEVL          Level of worried, nervous, or anxious feelings, last time
+0                   NIU
+1                   A lot
+2                   A little
+3                   Somewhere between a little and a lot
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+DEPFREQ             How often feel depressed
+0                   NIU
+1                   Daily
+2                   Weekly
+3                   Monthly
+4                   A few times a year
+5                   Never
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+DEPRX               Take medication for depression
+0                   NIU
+1                   No
+2                   Yes
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+DEPFEELEVL          Level of depression, last time depressed
+0                   NIU
+1                   A little
+2                   A lot
+3                   Somewhere between little and lot
+7                   Unknown-refused
+8                   Unknown-not ascertained
+9                   Unknown-don't know
+
+MORTSTAT            Final mortality status
+1                   Assumed deceased
+2                   Assumed alive
+9                   NIU
+
+MORTDODY            Year of death
+1986                1986
+1987                1987
+1988                1988
+1989                1989
+1990                1990
+1991                1991
+1992                1992
+1993                1993
+1994                1994
+1995                1995
+1996                1996
+1997                1997
+1998                1998
+1999                1999
+2000                2000
+2001                2001
+2002                2002
+2003                2003
+2004                2004
+2005                2005
+2006                2006
+2007                2007
+2008                2008
+2009                2009
+2010                2010
+2011                2011
+2012                2012
+2013                2013
+2014                2014
+2015                2015
+2016                2016
+2017                2017
+2018                2018
+2019                2019
+9999                NIU
+
+MORTUCODLD          Leading underlying cause of death (ICD-10)
+01                  Diseases of heart
+02                  Malignant neoplasms
+03                  Chronic lower respiratory diseases
+04                  Accidents (unintentional injuries)
+05                  Cerebrovascular diseases
+06                  Alzheimer's disease
+07                  Diabetes mellitus
+08                  Influenza and pneumonia
+09                  Nephritis, nephrotic syndrome and nephrosis
+10                  All other causes (residual)
+96                  NIU
+
